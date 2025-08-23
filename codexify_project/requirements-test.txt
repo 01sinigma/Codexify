@@ -1,0 +1,21 @@
+# Testing dependencies for Codexify
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+pytest-xdist>=3.0.0
+pytest-html>=3.1.0
+pytest-json-report>=1.5.0
+
+# Code coverage
+coverage>=7.0.0
+
+# Performance testing
+psutil>=5.9.0
+
+# Linting and code quality
+flake8>=6.0.0
+black>=23.0.0
+isort>=5.12.0
+
+# Integration testing
+tox>=4.0.0

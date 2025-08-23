@@ -1,0 +1,275 @@
+{
+  "first_project": {
+    "id": "first_project",
+    "name": "First Steps",
+    "description": "Load your first project",
+    "type": "projects",
+    "icon": "🚀",
+    "points": 10,
+    "requirements": {
+      "projects_loaded": 1
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "project_explorer": {
+    "id": "project_explorer",
+    "name": "Project Explorer",
+    "description": "Load 5 different projects",
+    "type": "projects",
+    "icon": "🗂️",
+    "points": 25,
+    "requirements": {
+      "projects_loaded": 5
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "project_master": {
+    "id": "project_master",
+    "name": "Project Master",
+    "description": "Load 25 different projects",
+    "type": "projects",
+    "icon": "👑",
+    "points": 100,
+    "requirements": {
+      "projects_loaded": 25
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "file_collector": {
+    "id": "file_collector",
+    "name": "File Collector",
+    "description": "Process 100 files in a single project",
+    "type": "files",
+    "icon": "📁",
+    "points": 20,
+    "requirements": {
+      "max_files_in_project": 100
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "file_hoarder": {
+    "id": "file_hoarder",
+    "name": "File Hoarder",
+    "description": "Process 1000 files in a single project",
+    "type": "files",
+    "icon": "📦",
+    "points": 50,
+    "requirements": {
+      "max_files_in_project": 1000
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "format_expert": {
+    "id": "format_expert",
+    "name": "Format Expert",
+    "description": "Work with 10 different file formats",
+    "type": "files",
+    "icon": "🔧",
+    "points": 30,
+    "requirements": {
+      "unique_formats_used": 10
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "first_analysis": {
+    "id": "first_analysis",
+    "name": "Code Inspector",
+    "description": "Run your first project analysis",
+    "type": "analysis",
+    "icon": "🔍",
+    "points": 15,
+    "requirements": {
+      "analyses_run": 1
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "analysis_expert": {
+    "id": "analysis_expert",
+    "name": "Analysis Expert",
+    "description": "Run 50 project analyses",
+    "type": "analysis",
+    "icon": "📊",
+    "points": 75,
+    "requirements": {
+      "analyses_run": 50
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "language_polyglot": {
+    "id": "language_polyglot",
+    "name": "Language Polyglot",
+    "description": "Analyze projects with 5+ programming languages",
+    "type": "analysis",
+    "icon": "🌍",
+    "points": 40,
+    "requirements": {
+      "max_languages_in_project": 5
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "duplicate_hunter": {
+    "id": "duplicate_hunter",
+    "name": "Duplicate Hunter",
+    "description": "Find duplicates in a project",
+    "type": "duplicates",
+    "icon": "🎯",
+    "points": 20,
+    "requirements": {
+      "duplicate_searches_run": 1
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "duplicate_expert": {
+    "id": "duplicate_expert",
+    "name": "Duplicate Expert",
+    "description": "Find duplicates in 10 projects",
+    "type": "duplicates",
+    "icon": "🔎",
+    "points": 60,
+    "requirements": {
+      "duplicate_searches_run": 10
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "code_cleaner": {
+    "id": "code_cleaner",
+    "name": "Code Cleaner",
+    "description": "Find and resolve 100 duplicate code blocks",
+    "type": "duplicates",
+    "icon": "🧹",
+    "points": 80,
+    "requirements": {
+      "duplicate_blocks_found": 100
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "first_collection": {
+    "id": "first_collection",
+    "name": "Code Collector",
+    "description": "Create your first code collection",
+    "type": "collection",
+    "icon": "📝",
+    "points": 15,
+    "requirements": {
+      "collections_created": 1
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "collection_master": {
+    "id": "collection_master",
+    "name": "Collection Master",
+    "description": "Create 25 code collections",
+    "type": "collection",
+    "icon": "📚",
+    "points": 75,
+    "requirements": {
+      "collections_created": 25
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "format_explorer": {
+    "id": "format_explorer",
+    "name": "Format Explorer",
+    "description": "Export code in all three formats (TXT, MD, HTML)",
+    "type": "collection",
+    "icon": "🎨",
+    "points": 35,
+    "requirements": {
+      "formats_used": [
+        "txt",
+        "md",
+        "html"
+      ]
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "speed_demon": {
+    "id": "speed_demon",
+    "name": "Speed Demon",
+    "description": "Process a project with 100+ files in under 30 seconds",
+    "type": "efficiency",
+    "icon": "⚡",
+    "points": 50,
+    "requirements": {
+      "fast_processing": {
+        "files": 100,
+        "time": 30
+      }
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "memory_master": {
+    "id": "memory_master",
+    "name": "Memory Master",
+    "description": "Process a 1GB+ project without errors",
+    "type": "efficiency",
+    "icon": "💾",
+    "points": 60,
+    "requirements": {
+      "large_project_size": 1073741824
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "deep_diver": {
+    "id": "deep_diver",
+    "name": "Deep Diver",
+    "description": "Analyze a project with directory depth of 10+ levels",
+    "type": "exploration",
+    "icon": "🌊",
+    "points": 45,
+    "requirements": {
+      "max_directory_depth": 10
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  },
+  "binary_explorer": {
+    "id": "binary_explorer",
+    "name": "Binary Explorer",
+    "description": "Process a project containing 50+ binary files",
+    "type": "exploration",
+    "icon": "🔬",
+    "points": 55,
+    "requirements": {
+      "binary_files_processed": 50
+    },
+    "unlocked": false,
+    "unlocked_at": null,
+    "progress": {}
+  }
+}

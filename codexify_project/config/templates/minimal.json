@@ -1,0 +1,9 @@
+{
+  "name": "Minimal",
+  "description": "Simple, minimal output format",
+  "include_header": false,
+  "include_toc": false,
+  "include_metadata": false,
+  "code_style": "plain",
+  "section_headers": false
+}

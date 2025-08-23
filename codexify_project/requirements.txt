@@ -1,0 +1,20 @@
+# Core dependencies
+psutil>=5.9.0
+pathlib2>=2.3.7; python_version < "3.4"
+
+# Performance and optimization dependencies
+# Note: These are optional and can be installed separately if needed
+# psutil is already included above for memory monitoring
+# threading and multiprocessing are part of Python standard library
+# gc, tracemalloc, weakref are part of Python standard library
+# json, pickle, tempfile, shutil are part of Python standard library
+# time, datetime, statistics are part of Python standard library
+# dataclasses are part of Python standard library (Python 3.7+)
+# typing is part of Python standard library (Python 3.5+)
+# functools is part of Python standard library
+# os, sys are part of Python standard library
+# queue is part of Python standard library
+# concurrent.futures is part of Python standard library (Python 3.2+)
+# pathlib is part of Python standard library (Python 3.4+)
+# hashlib is part of Python standard library
+# cProfile, pstats, io are part of Python standard library

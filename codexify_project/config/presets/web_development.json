@@ -1,0 +1,57 @@
+{
+  "name": "web_development",
+  "description": "Settings optimized for web development",
+  "created_at": "2025-08-24T00:53:05.344370",
+  "settings": {
+    "app": {
+      "name": "Codexify",
+      "version": "0.4.0",
+      "theme": "default",
+      "language": "en",
+      "auto_save": true,
+      "auto_backup": true,
+      "max_recent_projects": 10
+    },
+    "scanning": {
+      "max_file_size": 10485760,
+      "skip_binary": true,
+      "follow_symlinks": false,
+      "max_depth": 50,
+      "default_formats": [
+        ".py",
+        ".js",
+        ".html",
+        ".css",
+        ".md"
+      ]
+    },
+    "analysis": {
+      "enable_quality_metrics": true,
+      "enable_complexity_analysis": true,
+      "min_block_size": 3,
+      "similarity_threshold": 0.8,
+      "max_duplicate_groups": 100
+    },
+    "output": {
+      "default_format": "md",
+      "include_metadata": true,
+      "include_timestamps": true,
+      "max_line_length": 120,
+      "auto_format": true
+    },
+    "ui": {
+      "window_width": 1000,
+      "window_height": 700,
+      "show_toolbar": true,
+      "show_statusbar": true,
+      "auto_refresh": true,
+      "refresh_interval": 5000
+    },
+    "performance": {
+      "max_threads": 4,
+      "chunk_size": 1024,
+      "cache_size": 1000,
+      "enable_caching": true
+    }
+  }
+}
