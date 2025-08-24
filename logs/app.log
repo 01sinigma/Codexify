@@ -1,0 +1,73 @@
+2025-08-24 02:54:11 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 02:56:58 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 02:58:00 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 02:58:31 | INFO | codexify.engine | load_project: C:/Users/chere/Downloads/Cymatics - Cartel Hip Hop Drum Kit
+2025-08-24 03:00:25 | INFO | codexify.engine | load_project: C:/Users/chere/Downloads/ninja-master
+2025-08-24 03:00:26 | INFO | codexify.engine | classified | include=17 other=168
+2025-08-24 03:01:20 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:09:10 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:09:11 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:09:11 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:09:20 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:10:27 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:13:53 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:14:00 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:15:22 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:15:46 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:16:50 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:17:24 | INFO | codexify.engine | load_project: C:/Work Projeckt/Сборщик
+2025-08-24 03:17:25 | INFO | codexify.engine | classified | include=453 other=191
+2025-08-24 03:17:47 | INFO | codexify.engine | active formats set: {'.py'}
+2025-08-24 03:17:47 | INFO | codexify.engine | classified | include=423 other=221
+2025-08-24 03:17:48 | INFO | codexify.engine | active formats set: set()
+2025-08-24 03:17:48 | INFO | codexify.engine | classified | include=453 other=191
+2025-08-24 03:17:48 | INFO | codexify.engine | active formats set: {'.py'}
+2025-08-24 03:17:48 | INFO | codexify.engine | classified | include=423 other=221
+2025-08-24 03:17:49 | INFO | codexify.engine | active formats set: set()
+2025-08-24 03:17:49 | INFO | codexify.engine | classified | include=453 other=191
+2025-08-24 03:24:02 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:24:26 | INFO | codexify.engine | active formats set: {'.h', '.hpp', '.c', '.cpp'}
+2025-08-24 03:24:47 | INFO | codexify.engine | active formats set: {'.ap'}
+2025-08-24 03:24:57 | INFO | codexify.engine | active formats set: set()
+2025-08-24 03:24:58 | INFO | codexify.engine | active formats set: {'.ap'}
+2025-08-24 03:25:00 | INFO | codexify.engine | active formats set: set()
+2025-08-24 03:25:01 | INFO | codexify.engine | active formats set: {'.ap'}
+2025-08-24 03:25:02 | INFO | codexify.engine | active formats set: set()
+2025-08-24 03:25:03 | INFO | codexify.engine | active formats set: {'.ap'}
+2025-08-24 03:25:04 | INFO | codexify.engine | active formats set: set()
+2025-08-24 03:25:05 | INFO | codexify.engine | active formats set: set()
+2025-08-24 03:25:57 | INFO | codexify.engine | active formats set: {'.java'}
+2025-08-24 03:28:45 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:28:49 | INFO | codexify.engine | active formats set: {'.go.mod'}
+2025-08-24 03:28:51 | INFO | codexify.engine | active formats set: set()
+2025-08-24 03:28:55 | INFO | codexify.engine | active formats set: {'.js'}
+2025-08-24 03:28:56 | INFO | codexify.engine | active formats set: {'.java', '.js'}
+2025-08-24 03:28:59 | INFO | codexify.engine | active formats set: {'.java', '.json', '.js'}
+2025-08-24 03:29:00 | INFO | codexify.engine | active formats set: {'.csv', '.json', '.java', '.js'}
+2025-08-24 03:29:00 | INFO | codexify.engine | active formats set: {'.csv', '.json', '.js', '.java', '.ini'}
+2025-08-24 03:29:04 | INFO | codexify.engine | active formats set: {'.csv', '.ini', '.json', '.js'}
+2025-08-24 03:29:05 | INFO | codexify.engine | active formats set: {'.ini', '.json', '.js'}
+2025-08-24 03:29:06 | INFO | codexify.engine | active formats set: {'.json', '.js'}
+2025-08-24 03:29:13 | INFO | codexify.engine | active formats set: {'.AD', '.json', '.js'}
+2025-08-24 03:29:15 | INFO | codexify.engine | active formats set: {'.json', '.js'}
+2025-08-24 03:29:17 | INFO | codexify.engine | active formats set: {'.AD', '.json', '.js'}
+2025-08-24 03:29:26 | INFO | codexify.engine | active formats set: {'.AD', '.js'}
+2025-08-24 03:29:27 | INFO | codexify.engine | active formats set: {'.js'}
+2025-08-24 03:29:28 | INFO | codexify.engine | active formats set: set()
+2025-08-24 03:47:36 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 03:47:45 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 09:26:51 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 09:27:35 | INFO | codexify.engine | active formats set: {'.svg', '.scss', '.tsx', '.xml', '.js', '.java', '.cs', '.swift', '.py', '.ts', '.rs', '.go', '.c', '.htm', '.jsx', '.cpp', '.css', '.php', '.rb', '.sass', '.html', '.less'}
+2025-08-24 09:27:36 | INFO | codexify.engine | active formats set: {'.svg', '.scss', '.tsx', '.xml', '.js', '.java', '.cs', '.swift', '.py', '.ts', '.rs', '.go', '.c', '.htm', '.jsx', '.cpp', '.css', '.php', '.rb', '.sass', '.html', '.less'}
+2025-08-24 09:27:39 | INFO | codexify.engine | active formats set: {'.svg', '.scss', '.tsx', '.xml', '.java', '.cs', '.swift', '.py', '.ts', '.rs', '.go', '.c', '.htm', '.jsx', '.cpp', '.css', '.php', '.rb', '.sass', '.html', '.less'}
+2025-08-24 09:27:40 | INFO | codexify.engine | active formats set: {'.svg', '.scss', '.tsx', '.xml', '.cs', '.swift', '.py', '.ts', '.rs', '.go', '.c', '.htm', '.jsx', '.cpp', '.css', '.php', '.rb', '.sass', '.html', '.less'}
+2025-08-24 09:27:41 | INFO | codexify.engine | active formats set: {'.svg', '.scss', '.tsx', '.xml', '.cs', '.swift', '.ts', '.rs', '.go', '.c', '.htm', '.jsx', '.cpp', '.css', '.php', '.rb', '.sass', '.html', '.less'}
+2025-08-24 09:27:41 | INFO | codexify.engine | active formats set: {'.c', '.svg', '.htm', '.jsx', '.php', '.scss', '.less', '.tsx', '.rb', '.cpp', '.html', '.xml', '.css', '.rs', '.sass', '.go', '.cs', '.swift'}
+2025-08-24 09:27:42 | INFO | codexify.engine | active formats set: set()
+2025-08-24 09:53:37 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 12:09:14 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 12:12:40 | INFO | codexify.engine | config applied | max_file_size=10485760 skip_binary=True
+2025-08-24 12:12:47 | INFO | codexify.engine | load_project: C:/Work Projeckt/Сборщик
+2025-08-24 12:12:48 | INFO | codexify.engine | classified | include=0 other=645
+2025-08-24 12:12:53 | INFO | codexify.engine | active formats set: {'.py'}
+2025-08-24 12:12:53 | INFO | codexify.engine | classified | include=423 other=222

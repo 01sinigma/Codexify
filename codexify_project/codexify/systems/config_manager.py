@@ -17,6 +17,9 @@ class ConfigManager:
         self.presets_dir = self.config_dir / "presets"
         self.themes_dir = self.config_dir / "themes"
         self.templates_dir = self.config_dir / "templates"
+        self.workspaces_dir = self.config_dir / "workspaces"
+        self.tags_file = self.config_dir / "tags.json"
+        self.filelists_dir = self.config_dir / "filelists"
         
         # Ensure directories exist
         self._ensure_directories()
@@ -76,10 +79,14 @@ class ConfigManager:
         self.presets = self._load_presets()
         self.themes = self._load_themes()
         self.templates = self._load_templates()
+        # Format presets (extension sets)
+        self.format_presets: Dict[str, List[str]] = self._load_format_presets()
+        # Path presets (absolute file paths for quick include)
+        self.path_presets: Dict[str, List[str]] = self._load_path_presets()
     
     def _ensure_directories(self):
         """Creates necessary configuration directories."""
-        for directory in [self.config_dir, self.presets_dir, self.themes_dir, self.templates_dir]:
+        for directory in [self.config_dir, self.presets_dir, self.themes_dir, self.templates_dir, self.workspaces_dir, self.filelists_dir]:
             directory.mkdir(parents=True, exist_ok=True)
     
     def _load_config(self) -> Dict[str, Any]:
@@ -206,6 +213,135 @@ class ConfigManager:
                     print(f"ConfigManager: Error loading preset {preset_file}: {e}")
         
         return presets
+
+    # -------- Format presets (extensions) --------
+    def _format_presets_file(self) -> Path:
+        return self.config_dir / "format_presets.json"
+
+    def _load_format_presets(self) -> Dict[str, List[str]]:
+        presets: Dict[str, List[str]] = {
+            "Web": [".html", ".css", ".js", ".ts"],
+            "Python": [".py", ".ipynb"],
+            "Java/Kotlin": [".java", ".kt"],
+            "C/C++": [".c", ".cpp", ".h", ".hpp"],
+            "Docs": [".md", ".rst", ".txt"],
+            "Data": [".json", ".yaml", ".yml", ".csv"]
+        }
+        try:
+            p = self._format_presets_file()
+            if p.exists():
+                with open(p, 'r', encoding='utf-8') as f:
+                    disk = json.load(f)
+                    if isinstance(disk, dict):
+                        presets.update(disk)
+        except Exception as e:
+            print(f"ConfigManager: Failed to load format presets: {e}")
+        return presets
+
+    def _save_format_presets(self):
+        try:
+            with open(self._format_presets_file(), 'w', encoding='utf-8') as f:
+                json.dump(self.format_presets, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"ConfigManager: Failed to save format presets: {e}")
+
+    def get_format_preset_names(self) -> List[str]:
+        return sorted(self.format_presets.keys())
+
+    def get_format_preset(self, name: str) -> List[str]:
+        return self.format_presets.get(name, [])
+
+    def save_format_preset(self, name: str, extensions: List[str]):
+        self.format_presets[name] = sorted(set(extensions))
+        self._save_format_presets()
+
+    def delete_format_preset(self, name: str):
+        if name in self.format_presets:
+            del self.format_presets[name]
+            self._save_format_presets()
+
+    # -------- Path presets (absolute file lists) --------
+    def _path_presets_file(self) -> Path:
+        return self.config_dir / "path_presets.json"
+
+    def _load_path_presets(self) -> Dict[str, List[str]]:
+        presets: Dict[str, List[str]] = {}
+        try:
+            p = self._path_presets_file()
+            if p.exists():
+                with open(p, 'r', encoding='utf-8') as f:
+                    disk = json.load(f)
+                    if isinstance(disk, dict):
+                        presets.update({k: list(v) for k, v in disk.items()})
+        except Exception as e:
+            print(f"ConfigManager: Failed to load path presets: {e}")
+        return presets
+
+    def _save_path_presets(self):
+        try:
+            with open(self._path_presets_file(), 'w', encoding='utf-8') as f:
+                json.dump(self.path_presets, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"ConfigManager: Failed to save path presets: {e}")
+
+    def get_path_preset_names(self) -> List[str]:
+        return sorted(self.path_presets.keys())
+
+    def get_path_preset(self, name: str) -> List[str]:
+        return list(self.path_presets.get(name, []))
+
+    def save_path_preset(self, name: str, paths: List[str]):
+        # store unique absolute paths
+        uniq = []
+        seen = set()
+        for p in paths:
+            try:
+                ap = str(Path(p).resolve())
+            except Exception:
+                ap = str(p)
+            if ap not in seen:
+                seen.add(ap)
+                uniq.append(ap)
+        self.path_presets[name] = uniq
+        self._save_path_presets()
+
+    def delete_path_preset(self, name: str):
+        if name in self.path_presets:
+            del self.path_presets[name]
+            self._save_path_presets()
+
+    # -------- Bundle export/import (formats, paths, saved filters, layout, active formats) --------
+    def export_bundle(self, file_path: str, layout: Dict[str, Any] = None, active_formats: List[str] = None):
+        bundle = {
+            "format_presets": self.format_presets,
+            "path_presets": self.path_presets,
+            "saved_filters": self.get_setting("ui.saved_filters", {}) or {},
+            "layout": layout or {},
+            "active_formats": list(active_formats or [])
+        }
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(bundle, f, indent=2, ensure_ascii=False)
+
+    def import_bundle(self, file_path: str) -> Dict[str, Any]:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            bundle = json.load(f)
+        # apply into config manager
+        fm = bundle.get("format_presets")
+        if isinstance(fm, dict):
+            self.format_presets.update(fm)
+            self._save_format_presets()
+        pp = bundle.get("path_presets")
+        if isinstance(pp, dict):
+            self.path_presets.update(pp)
+            self._save_path_presets()
+        sf = bundle.get("saved_filters")
+        if isinstance(sf, dict):
+            self.set_setting("ui.saved_filters", sf)
+        # return layout and active_formats to caller to apply in UI/engine
+        return {
+            "layout": bundle.get("layout", {}),
+            "active_formats": bundle.get("active_formats", [])
+        }
     
     def create_preset(self, name: str, description: str = "", settings: Dict[str, Any] = None):
         """
@@ -495,6 +631,118 @@ class ConfigManager:
     def clear_recent_projects(self):
         """Clears the recent projects list."""
         self.set_setting("app.recent_projects", [])
+
+    # -------- Saved filters (per list) --------
+    def get_saved_filters(self, list_id: str) -> List[Dict[str, Any]]:
+        all_filters = self.get_setting("ui.saved_filters", {}) or {}
+        return all_filters.get(list_id, [])
+
+    def save_filter(self, list_id: str, name: str, search: str, ext: str, min_kb: str):
+        all_filters = self.get_setting("ui.saved_filters", {}) or {}
+        items = all_filters.get(list_id, [])
+        # update if same name exists
+        updated = False
+        for it in items:
+            if it.get("name") == name:
+                it.update({"search": search, "ext": ext, "min_kb": min_kb})
+                updated = True
+                break
+        if not updated:
+            items.append({"name": name, "search": search, "ext": ext, "min_kb": min_kb})
+        all_filters[list_id] = items
+        self.set_setting("ui.saved_filters", all_filters)
+
+    # -------- Workspaces (save/restore full UI state) --------
+    def save_workspace(self, name: str, data: Dict[str, Any]):
+        """Save a workspace JSON under config/workspaces/{name}.json"""
+        path = self.workspaces_dir / f"{name}.json"
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def load_workspace(self, name: str) -> Optional[Dict[str, Any]]:
+        path = self.workspaces_dir / f"{name}.json"
+        if not path.exists():
+            return None
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+
+    def list_workspaces(self) -> List[str]:
+        return [p.stem for p in self.workspaces_dir.glob('*.json')]
+
+    def delete_workspace(self, name: str):
+        path = self.workspaces_dir / f"{name}.json"
+        if path.exists():
+            path.unlink()
+
+    # -------- Exact file list presets (include/other sets) --------
+    def save_filelist_preset(self, name: str, include: List[str], other: List[str]):
+        path = self.filelists_dir / f"{name}.json"
+        data = {"include": list(sorted(set(include))), "other": list(sorted(set(other)))}
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def load_filelist_preset(self, name: str) -> Optional[Dict[str, Any]]:
+        path = self.filelists_dir / f"{name}.json"
+        if not path.exists():
+            return None
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+
+    def list_filelist_presets(self) -> List[str]:
+        return [p.stem for p in self.filelists_dir.glob('*.json')]
+
+    def delete_filelist_preset(self, name: str):
+        path = self.filelists_dir / f"{name}.json"
+        if path.exists():
+            path.unlink()
+
+    # -------- Tags/Notes per file --------
+    def _load_tags(self) -> Dict[str, Dict[str, Any]]:
+        if self.tags_file.exists():
+            try:
+                with open(self.tags_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        return data
+            except Exception:
+                pass
+        return {}
+
+    def _save_tags(self, tags: Dict[str, Dict[str, Any]]):
+        with open(self.tags_file, 'w', encoding='utf-8') as f:
+            json.dump(tags, f, indent=2, ensure_ascii=False)
+
+    def add_tag(self, path: str, tag: str):
+        tags = self._load_tags()
+        item = tags.get(path, {"tags": [], "note": ""})
+        if tag not in item["tags"]:
+            item["tags"].append(tag)
+        tags[path] = item
+        self._save_tags(tags)
+
+    def remove_tag(self, path: str, tag: str):
+        tags = self._load_tags()
+        item = tags.get(path, {"tags": [], "note": ""})
+        item["tags"] = [t for t in item["tags"] if t != tag]
+        tags[path] = item
+        self._save_tags(tags)
+
+    def set_note(self, path: str, note: str):
+        tags = self._load_tags()
+        item = tags.get(path, {"tags": [], "note": ""})
+        item["note"] = note
+        tags[path] = item
+        self._save_tags(tags)
+
+    def get_item_meta(self, path: str) -> Dict[str, Any]:
+        tags = self._load_tags()
+        return tags.get(path, {"tags": [], "note": ""})
+
+    def delete_filter(self, list_id: str, name: str):
+        all_filters = self.get_setting("ui.saved_filters", {}) or {}
+        items = [it for it in all_filters.get(list_id, []) if it.get("name") != name]
+        all_filters[list_id] = items
+        self.set_setting("ui.saved_filters", all_filters)
     
     # Additional methods for test compatibility
     

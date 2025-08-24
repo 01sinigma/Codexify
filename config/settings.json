@@ -6,7 +6,13 @@
     "language": "en",
     "auto_save": true,
     "auto_backup": true,
-    "max_recent_projects": 10
+    "max_recent_projects": 10,
+    "recent_projects": [
+      "C:/Work Projeckt/Сборщик",
+      "C:/Users/chere/Downloads/ninja-master",
+      "C:/Users/chere/Downloads/Cymatics - Cartel Hip Hop Drum Kit",
+      "C:/Work Projeckt/Prismtone/app/src/main/java/com"
+    ]
   },
   "scanning": {
     "max_file_size": 10485760,
@@ -41,7 +47,22 @@
     "show_toolbar": true,
     "show_statusbar": true,
     "auto_refresh": true,
-    "refresh_interval": 5000
+    "refresh_interval": 5000,
+    "layout": {
+      "main_sash": 705,
+      "include_cols": {
+        "type": 20,
+        "name": 130,
+        "size": 20,
+        "path": 125
+      },
+      "other_cols": {
+        "type": 20,
+        "name": 130,
+        "size": 20,
+        "path": 125
+      }
+    }
   },
   "performance": {
     "max_threads": 4,

@@ -1,6 +1,7 @@
 # Core dependencies
 psutil>=5.9.0
 pathlib2>=2.3.7; python_version < "3.4"
+tkinterdnd2>=0.4.2
 
 # Performance and optimization dependencies
 # Note: These are optional and can be installed separately if needed

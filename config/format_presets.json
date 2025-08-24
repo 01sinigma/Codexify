@@ -1,0 +1,27 @@
+{
+  "Web": [
+    ".html",
+    ".css",
+    ".js",
+    ".ts"
+  ],
+  "Python": [
+    ".py",
+    ".ipynb"
+  ],
+  "Java/Kotlin": [
+    ".java",
+    ".kt"
+  ],
+  "Docs": [
+    ".md",
+    ".rst",
+    ".txt"
+  ],
+  "Data": [
+    ".json",
+    ".yaml",
+    ".yml",
+    ".csv"
+  ]
+}

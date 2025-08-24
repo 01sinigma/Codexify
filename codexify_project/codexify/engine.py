@@ -11,6 +11,7 @@ from .core.duplicate_finder import DuplicateFinder
 from .systems.config_manager import get_config_manager
 from .systems.achievement_system import get_achievement_system
 from .systems.hotkey_manager import get_hotkey_manager
+from .utils.logger import get_logger
 
 class CodexifyEngine:
     """
@@ -18,11 +19,15 @@ class CodexifyEngine:
     It holds the state, manages business logic, and notifies clients of changes.
     """
     def __init__(self):
+        self.log = get_logger("engine")
         self.state = CodexifyState()
         self.events = EventManager()
         self.builder = CodeBuilder()
         self.analyzer = ProjectAnalyzer()
         self.duplicate_finder = DuplicateFinder()
+        # history for undo/redo
+        self._undo_stack = []
+        self._redo_stack = []
         
         # Initialize systems
         self.config_manager = get_config_manager()
@@ -78,7 +83,7 @@ class CodexifyEngine:
         self.duplicate_finder.min_block_size = min_block_size
         self.duplicate_finder.similarity_threshold = similarity_threshold
         
-        print(f"Engine: Configuration applied - Max file size: {max_file_size}, Skip binary: {skip_binary}")
+        self.log.info("config applied | max_file_size=%s skip_binary=%s", max_file_size, skip_binary)
 
     def _run_in_background(self, func, *args, **kwargs):
         """Helper to run a function in a separate thread."""
@@ -94,6 +99,7 @@ class CodexifyEngine:
         self.state.is_busy = True
         self.state.status_message = f"Scanning {path}..."
         self.events.post(STATUS_CHANGED)
+        self.log.info("load_project: %s", path)
 
         # Run scanning in background
         self._run_in_background(self._scan_project, path)
@@ -128,7 +134,7 @@ class CodexifyEngine:
             
         except Exception as e:
             self.state.status_message = f"Error loading project: {e}"
-            print(f"Engine: Error scanning project: {e}")
+            self.log.exception("Error scanning project")
         finally:
             self.state.is_busy = False
             self.events.post(PROJECT_LOADED)
@@ -138,13 +144,11 @@ class CodexifyEngine:
         Updates the active file formats and re-classifies files.
         """
         self.state.active_formats = formats
-        print(f"Engine: Active formats set to {formats}")
-        
-        # Re-classify files if we have a project loaded
-        if self.state.all_discovered_files:
-            self._classify_files()
-            self.events.post(FILES_UPDATED)
-            print("Engine: Files updated event posted after format change.")
+        self.log.info("active formats set: %s", formats)
+        # Re-classify files immediately (considering union of known files)
+        self._classify_files()
+        self.events.post(FILES_UPDATED)
+        self.log.debug("post FILES_UPDATED after format change")
 
     def move_files(self, files: Set[str], to_list: str):
         """
@@ -152,10 +156,10 @@ class CodexifyEngine:
         'to_list' can be 'include' or 'other'.
         """
         if to_list not in ['include', 'other']:
-            print(f"Engine: Invalid destination list: {to_list}")
+            self.log.warning("invalid destination: %s", to_list)
             return
         
-        print(f"Engine: Moving {len(files)} files to {to_list} list...")
+        self.log.debug("move_files | count=%d dest=%s", len(files), to_list)
         
         # Remove files from both lists first
         self.state.include_files -= files
@@ -171,8 +175,115 @@ class CodexifyEngine:
         for file_path in files:
             self.state.file_inclusion_modes[file_path] = to_list
         
+        # record history
+        self._undo_stack.append({
+            'type': 'move',
+            'files': set(files),
+            'to': to_list,
+        })
+        self._redo_stack.clear()
         self.events.post(FILES_UPDATED)
-        print("Engine: Files updated event posted after move.")
+        self.log.debug("post FILES_UPDATED after move")
+
+    def apply_path_preset(self, name: str, destination: str = 'include', mode: str = 'merge'):
+        """Loads a saved path preset and adds files to include/other.
+        destination: 'include' or 'other'
+        mode: 'merge' (default) or 'replace' — replace clears destination list first
+        """
+        try:
+            paths = set(self.config_manager.get_path_preset(name))
+            if not paths:
+                return False
+            dest = 'include' if destination == 'include' else 'other'
+            if mode == 'replace':
+                if dest == 'include':
+                    # move all current include to other to keep modes consistent
+                    self.state.file_inclusion_modes = {k: v for k, v in self.state.file_inclusion_modes.items() if k not in self.state.include_files}
+                    self.state.include_files.clear()
+                else:
+                    self.state.file_inclusion_modes = {k: v for k, v in self.state.file_inclusion_modes.items() if k not in self.state.other_files}
+                    self.state.other_files.clear()
+            self.move_files(paths, dest)
+            return True
+        except Exception:
+            return False
+
+    def save_path_preset(self, name: str, from_selection: Optional[Set[str]] = None):
+        """Saves a path preset from current selection or include list if selection is None."""
+        paths = list(from_selection or self.state.include_files)
+        self.config_manager.save_path_preset(name, paths)
+        return True
+
+    def delete_path_preset(self, name: str):
+        self.config_manager.delete_path_preset(name)
+        return True
+
+    def remove_files(self, files: Set[str]):
+        """Removes files from include/other lists (moves to ignored)."""
+        if not files:
+            return
+        self.log.debug("remove_files | count=%d", len(files))
+        self.state.include_files -= files
+        self.state.other_files -= files
+        self.state.ignored_files.update(files)
+        for fp in files:
+            if fp in self.state.file_inclusion_modes:
+                del self.state.file_inclusion_modes[fp]
+        # record history
+        self._undo_stack.append({
+            'type': 'remove',
+            'files': set(files),
+            'from_include': set(files) & self.state.include_files,
+            'from_other': set(files) & self.state.other_files,
+        })
+        self._redo_stack.clear()
+        self.events.post(FILES_UPDATED)
+        self.log.debug("post FILES_UPDATED after removal")
+
+    # --- Undo/Redo ---
+    def undo(self):
+        if not self._undo_stack:
+            return False
+        action = self._undo_stack.pop()
+        self.log.debug("undo: %s", action.get('type'))
+        if action['type'] == 'move':
+            files = action['files']
+            dest = action['to']
+            back = 'include' if dest == 'other' else 'other'
+            # apply inverse
+            self.move_files(files, back)
+            # push redo info
+            self._redo_stack.append(action)
+            # don't double-record in history for inverse
+            if self._undo_stack and self._undo_stack[-1] == action:
+                pass
+        elif action['type'] == 'remove':
+            files = action['files']
+            # restore to previous lists
+            if action['from_include']:
+                self.state.include_files.update(action['from_include'])
+            if action['from_other']:
+                self.state.other_files.update(action['from_other'])
+            self.state.ignored_files -= files
+            for fp in files:
+                if fp in action.get('from_include', set()):
+                    self.state.file_inclusion_modes[fp] = 'include'
+                elif fp in action.get('from_other', set()):
+                    self.state.file_inclusion_modes[fp] = 'other'
+            self._redo_stack.append(action)
+            self.events.post(FILES_UPDATED)
+        return True
+
+    def redo(self):
+        if not self._redo_stack:
+            return False
+        action = self._redo_stack.pop()
+        self.log.debug("redo: %s", action.get('type'))
+        if action['type'] == 'move':
+            self.move_files(action['files'], action['to'])
+        elif action['type'] == 'remove':
+            self.remove_files(action['files'])
+        return True
 
     def collect_code(self, output_path: str, format_type: str = "txt", include_metadata: bool = True):
         """
@@ -202,7 +313,7 @@ class CodexifyEngine:
         Internal method to collect code in background thread.
         """
         try:
-            print(f"Engine: Collecting code to {output_path}...")
+            self.log.info("collect to: %s", output_path)
             
             # Use the builder to write the output
             success = self.builder.write_collected_sources(
@@ -210,20 +321,21 @@ class CodexifyEngine:
                 files_to_include=self.state.include_files,
                 project_path=self.state.project_path,
                 format_type=format_type,
-                include_metadata=include_metadata
+                include_metadata=include_metadata,
+                other_files=self.state.other_files
             )
             
             if success:
                 self.state.status_message = f"Code collected to {output_path}"
                 self.events.post(COLLECTION_COMPLETE, data=output_path)
-                print("Engine: Collection complete event posted.")
+                self.log.info("collection complete")
             else:
                 self.state.status_message = "Failed to collect code"
-                print("Engine: Collection failed.")
+                self.log.warning("collection failed")
                 
         except Exception as e:
             self.state.status_message = f"Error collecting code: {e}"
-            print(f"Engine: Error during collection: {e}")
+            self.log.exception("Error collecting code")
         finally:
             self.state.is_busy = False
             self.events.post(STATUS_CHANGED)
@@ -255,7 +367,7 @@ class CodexifyEngine:
         Internal method to analyze project in background thread.
         """
         try:
-            print("Engine: Analyzing project...")
+            self.log.info("analysis start")
             
             # Use the analyzer to get comprehensive project analysis
             analysis_results = self.analyzer.analyze_project(
@@ -274,11 +386,11 @@ class CodexifyEngine:
             
             self.state.status_message = "Analysis complete."
             self.events.post(ANALYSIS_COMPLETE, data=analysis_results)
-            print("Engine: Analysis complete event posted.")
+            self.log.info("analysis complete")
             
         except Exception as e:
             self.state.status_message = f"Error during analysis: {e}"
-            print(f"Engine: Error during analysis: {e}")
+            self.log.exception("Error during analysis")
         finally:
             self.state.is_busy = False
             self.events.post(STATUS_CHANGED)
@@ -314,7 +426,7 @@ class CodexifyEngine:
         Internal method to find duplicates in background thread.
         """
         try:
-            print("Engine: Finding duplicates...")
+            self.log.info("duplicates start")
             
             # Use the duplicate finder to detect duplicates
             duplicate_results = self.duplicate_finder.find_duplicates(
@@ -334,11 +446,11 @@ class CodexifyEngine:
             
             self.state.status_message = "Duplicate detection complete."
             self.events.post(ANALYSIS_COMPLETE, data={'type': 'duplicates', 'results': duplicate_results})
-            print("Engine: Duplicate detection complete event posted.")
+            self.log.info("duplicates complete")
             
         except Exception as e:
             self.state.status_message = f"Error during duplicate detection: {e}"
-            print(f"Engine: Error during duplicate detection: {e}")
+            self.log.exception("Error during duplicates")
         finally:
             self.state.is_busy = False
             self.events.post(STATUS_CHANGED)
@@ -351,31 +463,34 @@ class CodexifyEngine:
         if not self.state.all_discovered_files:
             return
         
-        print("Engine: Classifying files...")
+        self.log.debug("classify | discovered=%d", len(self.state.all_discovered_files))
         
-        # Clear current classifications
-        self.state.include_files.clear()
-        self.state.other_files.clear()
-        self.state.ignored_files.clear()
-        self.state.file_inclusion_modes.clear()
-        
-        # If no active formats, use default from configuration
-        if not self.state.active_formats:
-            default_formats = self.config_manager.get_setting("scanning.default_formats", [])
-            self.state.active_formats = set(default_formats)
-        
+        # Build source as union of discovered and currently listed files (supports DnD/manual adds)
+        source_files = set(self.state.all_discovered_files or set()) \
+            | set(self.state.include_files or set()) \
+            | set(self.state.other_files or set())
+
+        # Reset classifications
+        self.state.include_files = set()
+        self.state.other_files = set()
+        self.state.ignored_files = set()
+        self.state.file_inclusion_modes = {}
+
+        # If нет выбранных форматов, ничего не включаем: все попадут в Other
+        active_exts = set(self.state.active_formats or [])
+
         # Classify files based on extensions
-        for file_path in self.state.all_discovered_files:
+        for file_path in source_files:
             file_ext = Path(file_path).suffix.lower()
             
-            if file_ext in self.state.active_formats:
+            if file_ext in active_exts:
                 self.state.include_files.add(file_path)
                 self.state.file_inclusion_modes[file_path] = 'include'
             else:
                 self.state.other_files.add(file_path)
                 self.state.file_inclusion_modes[file_path] = 'other'
-        
-        print(f"Engine: Classified {len(self.state.include_files)} files as include, {len(self.state.other_files)} as other")
+
+        self.log.info("classified | include=%d other=%d", len(self.state.include_files), len(self.state.other_files))
 
     # Configuration Management Methods
     

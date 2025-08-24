@@ -256,6 +256,42 @@ This design ensures that business logic is centralized and reusable, making the 
 5. **Release Preparation** - подготовка к релизу
 6. **Final Testing** - финальное тестирование
 
+### Recent Additions (v0.5.x)
+- Path Presets: save/apply/delete presets of absolute file paths for quick Include/Other population (GUI: Command Palette → Path Preset actions).
+- Collect Output Headers: collected files now include full absolute path as a header before each file’s content (TXT/MD/HTML); a separate "Other files" section lists non-included files by full path without code.
+- Portable Build: PyInstaller onefile builds for GUI and CLI with a portable runtime hook that keeps logs/presets/templates next to the executable.
+- Inline Preview: preview panel shows full path and snippet of selected file; wrap/nowrap to be added.
+- Advanced Filters: type + Min/Max KB, hide hidden files, saved filters per list.
+- Workspaces: save/load/delete full UI state (formats, layout, lists, project path).
+- Tags & Notes: add tags and notes to files via context menu.
+- Pattern Selection: select by same extension or glob/substring pattern from context menu.
+- Bundle Export/Import: export format/path presets, saved filters, layout and active formats; import and apply in one шаг.
+- Watch Mode: optional auto-refresh of project state with configurable interval (UI → Command Palette).
+- Context-aware Command Palette: показывает релевантные действия для списков файлов (выбор по расширению/паттерну, пресеты, workspaces, bundle, watch).
+- Logs Viewer: кнопка в левом нижнем углу открывает окно логов (поиск/подсветка, копирование, обновление).
+- Instant Formats Reclassify: при изменении форматов файлы сразу переклассифицируются между Include/Other без задержки.
+
+### Portable Build (Windows)
+```powershell
+pip install pyinstaller
+# runtime hook at hooks/hook_portable.py already created
+pyinstaller --noconfirm --clean --windowed --onefile run_gui.py \
+  --name Codexify \
+  --runtime-hook hooks/hook_portable.py \
+  --hidden-import tkinterdnd2 \
+  --collect-data tkinterdnd2 \
+  --add-data templates:templates \
+  --add-data presets:presets
+
+pyinstaller --noconfirm --clean --onefile run_cli.py \
+  --name Codexify-CLI \
+  --runtime-hook hooks/hook_portable.py \
+  --hidden-import tkinterdnd2 \
+  --collect-data tkinterdnd2 \
+  --add-data templates:templates \
+  --add-data presets:presets
+```
+
 ## Usage
 
 ### Running the GUI

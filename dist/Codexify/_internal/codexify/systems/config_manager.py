@@ -1,0 +1,610 @@
+import json
+import os
+from typing import Dict, Any, List, Optional, Union
+from pathlib import Path
+from datetime import datetime
+import shutil
+
+class ConfigManager:
+    """
+    Manages application configuration, user settings, presets, and themes.
+    Provides a centralized way to store and retrieve application settings.
+    """
+    
+    def __init__(self, config_dir: str = "config"):
+        self.config_dir = Path(config_dir)
+        self.config_file = self.config_dir / "settings.json"
+        self.presets_dir = self.config_dir / "presets"
+        self.themes_dir = self.config_dir / "themes"
+        self.templates_dir = self.config_dir / "templates"
+        
+        # Ensure directories exist
+        self._ensure_directories()
+        
+        # Default configuration
+        self.default_config = {
+            "app": {
+                "name": "Codexify",
+                "version": "0.4.0",
+                "theme": "default",
+                "language": "en",
+                "auto_save": True,
+                "auto_backup": True,
+                "max_recent_projects": 10
+            },
+            "scanning": {
+                "max_file_size": 10485760,  # 10MB
+                "skip_binary": True,
+                "follow_symlinks": False,
+                "max_depth": 50,
+                "default_formats": [".py", ".js", ".html", ".css", ".md"]
+            },
+            "analysis": {
+                "enable_quality_metrics": True,
+                "enable_complexity_analysis": True,
+                "min_block_size": 3,
+                "similarity_threshold": 0.8,
+                "max_duplicate_groups": 100
+            },
+            "output": {
+                "default_format": "md",
+                "include_metadata": True,
+                "include_timestamps": True,
+                "max_line_length": 120,
+                "auto_format": True
+            },
+            "ui": {
+                "window_width": 1000,
+                "window_height": 700,
+                "show_toolbar": True,
+                "show_statusbar": True,
+                "auto_refresh": True,
+                "refresh_interval": 5000
+            },
+            "performance": {
+                "max_threads": 4,
+                "chunk_size": 1024,
+                "cache_size": 1000,
+                "enable_caching": True
+            }
+        }
+        
+        # Load configuration
+        self.config = self._load_config()
+        
+        # Load presets and themes
+        self.presets = self._load_presets()
+        self.themes = self._load_themes()
+        self.templates = self._load_templates()
+    
+    def _ensure_directories(self):
+        """Creates necessary configuration directories."""
+        for directory in [self.config_dir, self.presets_dir, self.themes_dir, self.templates_dir]:
+            directory.mkdir(parents=True, exist_ok=True)
+    
+    def _load_config(self) -> Dict[str, Any]:
+        """Loads configuration from file or creates default."""
+        try:
+            if self.config_file.exists():
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    # Merge with defaults to ensure all keys exist
+                    return self._merge_configs(self.default_config, config)
+            else:
+                # Create default config
+                self._save_config(self.default_config)
+                return self.default_config.copy()
+        except Exception as e:
+            print(f"ConfigManager: Error loading config: {e}")
+            return self.default_config.copy()
+    
+    def _merge_configs(self, default: Dict, user: Dict) -> Dict:
+        """Recursively merges user config with defaults."""
+        result = default.copy()
+        
+        for key, value in user.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._merge_configs(result[key], value)
+            else:
+                result[key] = value
+        
+        return result
+    
+    def _save_config(self, config: Dict[str, Any]):
+        """Saves configuration to file."""
+        try:
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"ConfigManager: Error saving config: {e}")
+    
+    def get_setting(self, key_path: str, default: Any = None) -> Any:
+        """
+        Gets a setting value using dot notation (e.g., 'ui.window_width').
+        
+        Args:
+            key_path: Dot-separated path to the setting
+            default: Default value if setting not found
+            
+        Returns:
+            Setting value or default
+        """
+        keys = key_path.split('.')
+        value = self.config
+        
+        try:
+            for key in keys:
+                value = value[key]
+            return value
+        except (KeyError, TypeError):
+            return default
+    
+    def set_setting(self, key_path: str, value: Any):
+        """
+        Sets a setting value using dot notation.
+        
+        Args:
+            key_path: Dot-separated path to the setting
+            value: Value to set
+        """
+        keys = key_path.split('.')
+        config = self.config
+        
+        # Navigate to the parent of the target key
+        for key in keys[:-1]:
+            if key not in config:
+                config[key] = {}
+            config = config[key]
+        
+        # Set the value
+        config[keys[-1]] = value
+        
+        # Save configuration
+        self._save_config(self.config)
+        
+        # Notify about configuration change
+        self.on_config_changed(key_path, value)
+    
+    def get_all_settings(self) -> Dict[str, Any]:
+        """Returns the complete configuration."""
+        return self.config.copy()
+    
+    def export_config(self, file_path: str):
+        """Exports configuration to a file."""
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"ConfigManager: Error exporting config: {e}")
+    
+    def import_config(self, file_path: str):
+        """Imports configuration from a file."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                imported_config = json.load(f)
+            
+            # Merge with current config
+            self.config = self._merge_configs(self.config, imported_config)
+            self._save_config(self.config)
+        except Exception as e:
+            print(f"ConfigManager: Error importing config: {e}")
+    
+    # Preset Management
+    
+    def _load_presets(self) -> Dict[str, Dict[str, Any]]:
+        """Loads available presets."""
+        presets = {}
+        
+        if self.presets_dir.exists():
+            for preset_file in self.presets_dir.glob("*.json"):
+                try:
+                    with open(preset_file, 'r', encoding='utf-8') as f:
+                        preset_data = json.load(f)
+                        preset_name = preset_file.stem
+                        presets[preset_name] = preset_data
+                except Exception as e:
+                    print(f"ConfigManager: Error loading preset {preset_file}: {e}")
+        
+        return presets
+    
+    def create_preset(self, name: str, description: str = "", settings: Dict[str, Any] = None):
+        """
+        Creates a new preset with current or specified settings.
+        
+        Args:
+            name: Preset name
+            description: Preset description
+            settings: Settings to save (uses current if None)
+        """
+        if settings is None:
+            settings = self.config.copy()
+        
+        preset_data = {
+            "name": name,
+            "description": description,
+            "created_at": datetime.now().isoformat(),
+            "settings": settings
+        }
+        
+        preset_file = self.presets_dir / f"{name}.json"
+        
+        try:
+            with open(preset_file, 'w', encoding='utf-8') as f:
+                json.dump(preset_data, f, indent=2, ensure_ascii=False)
+            
+            # Reload presets
+            self.presets = self._load_presets()
+        except Exception as e:
+            print(f"ConfigManager: Error creating preset: {e}")
+    
+    def load_preset(self, name: str):
+        """Loads a preset and applies its settings."""
+        if name not in self.presets:
+            raise ValueError(f"Preset '{name}' not found")
+        
+        preset = self.presets[name]
+        self.config = self._merge_configs(self.default_config, preset["settings"])
+        self._save_config(self.config)
+    
+    def delete_preset(self, name: str):
+        """Deletes a preset."""
+        preset_file = self.presets_dir / f"{name}.json"
+        
+        if preset_file.exists():
+            try:
+                preset_file.unlink()
+                # Reload presets
+                self.presets = self._load_presets()
+            except Exception as e:
+                print(f"ConfigManager: Error deleting preset: {e}")
+    
+    def get_preset_names(self) -> List[str]:
+        """Returns list of available preset names."""
+        return list(self.presets.keys())
+    
+    def get_preset_info(self, name: str) -> Optional[Dict[str, Any]]:
+        """Returns information about a preset."""
+        return self.presets.get(name)
+    
+    # Theme Management
+    
+    def _load_themes(self) -> Dict[str, Dict[str, Any]]:
+        """Loads available themes."""
+        themes = {}
+        
+        if self.themes_dir.exists():
+            for theme_file in self.themes_dir.glob("*.json"):
+                try:
+                    with open(theme_file, 'r', encoding='utf-8') as f:
+                        theme_data = json.load(f)
+                        theme_name = theme_file.stem
+                        themes[theme_name] = theme_data
+                except Exception as e:
+                    print(f"ConfigManager: Error loading theme {theme_file}: {e}")
+        
+        # Add default theme if none exists
+        if not themes:
+            self._create_default_theme()
+            themes = self._load_themes()
+        
+        return themes
+    
+    def _create_default_theme(self):
+        """Creates a default theme."""
+        default_theme = {
+            "name": "Default",
+            "description": "Default Codexify theme",
+            "colors": {
+                "primary": "#007acc",
+                "secondary": "#6c757d",
+                "success": "#28a745",
+                "warning": "#ffc107",
+                "danger": "#dc3545",
+                "info": "#17a2b8",
+                "light": "#f8f9fa",
+                "dark": "#343a40",
+                "background": "#ffffff",
+                "foreground": "#212529"
+            },
+            "fonts": {
+                "main": "Segoe UI",
+                "monospace": "Consolas",
+                "size": 10
+            },
+            "spacing": {
+                "padding": 8,
+                "margin": 4,
+                "border_radius": 4
+            }
+        }
+        
+        theme_file = self.themes_dir / "default.json"
+        try:
+            with open(theme_file, 'w', encoding='utf-8') as f:
+                json.dump(default_theme, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"ConfigManager: Error creating default theme: {e}")
+    
+    def get_theme(self, name: str = None) -> Dict[str, Any]:
+        """Gets theme data by name or current theme."""
+        if name is None:
+            name = self.get_setting("app.theme", "default")
+        
+        return self.themes.get(name, self.themes.get("default", {}))
+    
+    def get_theme_names(self) -> List[str]:
+        """Returns list of available theme names."""
+        return list(self.themes.keys())
+    
+    def create_theme(self, name: str, theme_data: Dict[str, Any]):
+        """Creates a new theme."""
+        theme_file = self.themes_dir / f"{name}.json"
+        
+        try:
+            with open(theme_file, 'w', encoding='utf-8') as f:
+                json.dump(theme_data, f, indent=2, ensure_ascii=False)
+            
+            # Reload themes
+            self.themes = self._load_themes()
+        except Exception as e:
+            print(f"ConfigManager: Error creating theme: {e}")
+    
+    # Template Management
+    
+    def _load_templates(self) -> Dict[str, Dict[str, Any]]:
+        """Loads available output templates."""
+        templates = {}
+        
+        if self.templates_dir.exists():
+            for template_file in self.templates_dir.glob("*.json"):
+                try:
+                    with open(template_file, 'r', encoding='utf-8') as f:
+                        template_data = json.load(f)
+                        template_name = template_file.stem
+                        templates[template_name] = template_data
+                except Exception as e:
+                    print(f"ConfigManager: Error loading template {template_file}: {e}")
+        
+        # Add default templates if none exist
+        if not templates:
+            self._create_default_templates()
+            templates = self._load_templates()
+        
+        return templates
+    
+    def _create_default_templates(self):
+        """Creates default output templates."""
+        default_templates = {
+            "professional": {
+                "name": "Professional",
+                "description": "Clean, professional output format",
+                "include_header": True,
+                "include_toc": True,
+                "include_metadata": True,
+                "code_style": "github",
+                "section_headers": True
+            },
+            "minimal": {
+                "name": "Minimal",
+                "description": "Simple, minimal output format",
+                "include_header": False,
+                "include_toc": False,
+                "include_metadata": False,
+                "code_style": "plain",
+                "section_headers": False
+            },
+            "documentation": {
+                "name": "Documentation",
+                "description": "Documentation-focused output format",
+                "include_header": True,
+                "include_toc": True,
+                "include_metadata": True,
+                "code_style": "github",
+                "section_headers": True,
+                "include_examples": True
+            }
+        }
+        
+        for name, template_data in default_templates.items():
+            template_file = self.templates_dir / f"{name}.json"
+            try:
+                with open(template_file, 'w', encoding='utf-8') as f:
+                    json.dump(template_data, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                print(f"ConfigManager: Error creating template {name}: {e}")
+    
+    def get_template(self, name: str) -> Dict[str, Any]:
+        """Gets template data by name."""
+        return self.templates.get(name, self.templates.get("professional", {}))
+    
+    def get_template_names(self) -> List[str]:
+        """Returns list of available template names."""
+        return list(self.templates.keys())
+    
+    # Utility Methods
+    
+    def backup_config(self, backup_dir: str = "backups"):
+        """Creates a backup of the current configuration."""
+        backup_path = Path(backup_dir)
+        backup_path.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = backup_path / f"config_backup_{timestamp}.json"
+        
+        try:
+            shutil.copy2(self.config_file, backup_file)
+            return str(backup_file)
+        except Exception as e:
+            print(f"ConfigManager: Error creating backup: {e}")
+            return None
+    
+    def restore_config(self, backup_file: str):
+        """Restores configuration from a backup file."""
+        try:
+            shutil.copy2(backup_file, self.config_file)
+            # Reload configuration
+            self.config = self._load_config()
+        except Exception as e:
+            print(f"ConfigManager: Error restoring backup: {e}")
+    
+    def validate_config(self) -> List[str]:
+        """Validates the current configuration and returns any errors."""
+        errors = []
+        
+        # Check required keys
+        for key, value in self.default_config.items():
+            if key not in self.config:
+                errors.append(f"Missing required config section: {key}")
+                continue
+            
+            if isinstance(value, dict):
+                for subkey in value:
+                    if subkey not in self.config[key]:
+                        errors.append(f"Missing required config key: {key}.{subkey}")
+        
+        # Validate specific values
+        if self.get_setting("scanning.max_file_size", 0) <= 0:
+            errors.append("max_file_size must be positive")
+        
+        if self.get_setting("analysis.similarity_threshold", 0) < 0 or self.get_setting("analysis.similarity_threshold", 0) > 1:
+            errors.append("similarity_threshold must be between 0 and 1")
+        
+        return errors
+    
+    def get_recent_projects(self) -> List[str]:
+        """Gets list of recently opened projects."""
+        return self.get_setting("app.recent_projects", [])
+    
+    def add_recent_project(self, project_path: str):
+        """Adds a project to recent projects list."""
+        recent = self.get_recent_projects()
+        
+        # Remove if already exists
+        if project_path in recent:
+            recent.remove(project_path)
+        
+        # Add to beginning
+        recent.insert(0, project_path)
+        
+        # Limit list size
+        max_recent = self.get_setting("app.max_recent_projects", 10)
+        recent = recent[:max_recent]
+        
+        self.set_setting("app.recent_projects", recent)
+    
+    def clear_recent_projects(self):
+        """Clears the recent projects list."""
+        self.set_setting("app.recent_projects", [])
+    
+    # Additional methods for test compatibility
+    
+    def get_presets(self) -> Dict[str, Dict[str, Any]]:
+        """Returns all presets with their configurations."""
+        return self.presets
+    
+    def export_configuration(self, file_path: str):
+        """Exports the current configuration to a file."""
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"ConfigManager: Error exporting config: {e}")
+    
+    def import_configuration(self, file_path: str):
+        """Imports configuration from a file."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                imported_config = json.load(f)
+                # Merge with current config
+                self.config = self._merge_configs(self.config, imported_config)
+                self._save_config(self.config)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Configuration file not found: {file_path}")
+        except json.JSONDecodeError as e:
+            raise json.JSONDecodeError(f"Invalid JSON in configuration file: {e}", e.doc, e.pos)
+        except Exception as e:
+            print(f"ConfigManager: Error importing config: {e}")
+    
+    def validate_configuration(self) -> bool:
+        """Validates the current configuration."""
+        errors = self.validate_config()
+        return len(errors) == 0
+    
+    def get_configuration_schema(self) -> Dict[str, Any]:
+        """Returns the configuration schema."""
+        return self.default_config
+    
+    def get_theme_options(self) -> List[str]:
+        """Returns available theme options."""
+        return list(self.themes.keys())
+    
+    def get_language_options(self) -> List[str]:
+        """Returns available language options."""
+        return ["en", "es", "fr", "de", "ru", "zh", "ja"]
+    
+    def get_output_format_options(self) -> List[str]:
+        """Returns available output format options."""
+        return ["txt", "md", "html", "json", "xml"]
+    
+    def merge_configuration(self, partial_config: Dict[str, Any]):
+        """Merges a partial configuration with the current one."""
+        self.config = self._merge_configs(self.config, partial_config)
+        self._save_config(self.config)
+    
+    def get_configuration_diff(self, other_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Returns differences between current and other configuration."""
+        diff = {}
+        
+        for key, value in other_config.items():
+            if key not in self.config:
+                diff[key] = {"current": None, "other": value}
+            elif self.config[key] != value:
+                diff[key] = {"current": self.config[key], "other": value}
+        
+        return diff
+    
+    def create_backup(self, backup_path: str):
+        """Creates a configuration backup."""
+        return self.backup_config(backup_path)
+    
+    def validate_setting(self, key: str, value: Any) -> bool:
+        """Validates a specific setting value."""
+        try:
+            # Basic validation based on key
+            if key == "app.theme":
+                return value in self.get_theme_options()
+            elif key == "app.language":
+                return value in self.get_language_options()
+            elif key == "output.default_format":
+                return value in self.get_output_format_options()
+            elif key == "scanning.max_file_size":
+                return isinstance(value, (int, float)) and value > 0
+            elif key == "analysis.similarity_threshold":
+                return isinstance(value, (int, float)) and 0 <= value <= 1
+            elif key == "ui.window_width" or key == "ui.window_height":
+                return isinstance(value, (int, float)) and value > 0
+            else:
+                return True  # Default to valid for unknown keys
+        except Exception:
+            return False
+    
+    def reset_to_defaults(self):
+        """Resets configuration to default values."""
+        self.config = self.default_config.copy()
+        self._save_config(self.config)
+    
+    def on_config_changed(self, key: str, value: Any):
+        """Callback for configuration changes."""
+        # This method can be overridden by subclasses or set as a callback
+        pass
+
+
+# Global instance for easy access
+_config_manager = None
+
+def get_config_manager() -> ConfigManager:
+    """Returns the global configuration manager instance."""
+    global _config_manager
+    if _config_manager is None:
+        _config_manager = ConfigManager()
+    return _config_manager
