@@ -1,19 +1,22 @@
 {
   "name": "web_development",
   "description": "Settings optimized for web development",
-  "created_at": "2025-08-24T00:53:05.344370",
+  "created_at": "2025-08-24T23:56:59.640437",
   "settings": {
     "app": {
       "name": "Codexify",
       "version": "0.4.0",
-      "theme": "default",
-      "language": "en",
+      "theme": "dark",
+      "language": "es",
       "auto_save": true,
       "auto_backup": true,
-      "max_recent_projects": 10
+      "max_recent_projects": 10,
+      "recent_projects": [
+        "C:/Work Projeckt/Prismtone/app/src/main/java"
+      ]
     },
     "scanning": {
-      "max_file_size": 10485760,
+      "max_file_size": 5242880,
       "skip_binary": true,
       "follow_symlinks": false,
       "max_depth": 50,
@@ -40,7 +43,7 @@
       "auto_format": true
     },
     "ui": {
-      "window_width": 1000,
+      "window_width": 800,
       "window_height": 700,
       "show_toolbar": true,
       "show_statusbar": true,

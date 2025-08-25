@@ -9,8 +9,8 @@
     "requirements": {
       "projects_loaded": 1
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-08-25T00:11:51.647434",
     "progress": {}
   },
   "project_explorer": {
@@ -23,8 +23,8 @@
     "requirements": {
       "projects_loaded": 5
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-08-25T00:11:51.647443",
     "progress": {}
   },
   "project_master": {
@@ -37,8 +37,8 @@
     "requirements": {
       "projects_loaded": 25
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-08-25T00:49:51.513548",
     "progress": {}
   },
   "file_collector": {
@@ -51,8 +51,8 @@
     "requirements": {
       "max_files_in_project": 100
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-08-25T00:11:51.647447",
     "progress": {}
   },
   "file_hoarder": {
@@ -65,8 +65,8 @@
     "requirements": {
       "max_files_in_project": 1000
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-08-25T00:39:55.282933",
     "progress": {}
   },
   "format_expert": {
@@ -93,8 +93,8 @@
     "requirements": {
       "analyses_run": 1
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-08-25T00:11:51.647453",
     "progress": {}
   },
   "analysis_expert": {
@@ -121,8 +121,8 @@
     "requirements": {
       "max_languages_in_project": 5
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-08-25T00:11:51.647456",
     "progress": {}
   },
   "duplicate_hunter": {
@@ -135,8 +135,8 @@
     "requirements": {
       "duplicate_searches_run": 1
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-08-25T00:11:51.647458",
     "progress": {}
   },
   "duplicate_expert": {

@@ -124,35 +124,21 @@ class CodeBuilder:
     
     def _write_text_format(self, output_path: str, files: Set[str], 
                           file_stats: Dict, project_path: str, include_metadata: bool, other_files: Set[str]) -> bool:
-        """Writes output in plain text format."""
+        """Writes output in plain text format (minimal):
+        - First: only full paths of Other files (one per line)
+        - Then: for each Include file -> one line with full path, then raw code
+        """
         try:
             with open(output_path, 'w', encoding='utf-8') as outfile:
-                if include_metadata:
-                    outfile.write(f"Codexify - Collected Sources\n")
-                    outfile.write(f"Generated: {file_stats['generated_at']}\n")
-                    outfile.write(f"Total files: {file_stats['total_files']}\n")
-                    outfile.write(f"Total size: {file_stats['total_size']} bytes\n")
-                # Always write full path lists at the beginning
-                outfile.write("== Include files (full paths) ==\n")
-                for p in sorted(files):
-                    outfile.write(p + "\n")
-                outfile.write("\n== Other files (full paths) ==\n")
+                # Other files (paths only)
                 for p in sorted(other_files or set()):
                     outfile.write(p + "\n")
-                outfile.write("\n" + ("=" * 50) + "\n\n")
-                
+                outfile.write("\n")
+                # Include files: path then code
                 for file_path in sorted(files):
                     file_info = file_stats['file_info'][file_path]
-                    
-                    # Always show full path before content
-                    outfile.write(f"=== {file_path} ===\n")
-                    
-                    if include_metadata:
-                        outfile.write(f"Size: {file_info['size']} bytes\n")
-                        outfile.write(f"Modified: {datetime.fromtimestamp(file_info['modified']).isoformat()}\n")
-                        outfile.write(f"Encoding: {file_info['encoding']}\n")
-                        outfile.write("-" * 30 + "\n\n")
-                    
+                    # Path line
+                    outfile.write(file_path + "\n")
                     try:
                         encoding = file_info['encoding']
                         if encoding == 'unknown':
@@ -161,15 +147,12 @@ class CodeBuilder:
                         with open(file_path, 'r', encoding=encoding, errors='replace') as infile:
                             content = infile.read()
                             outfile.write(content)
-                            
+                        # Ensure newline separation between files
                         if not content.endswith('\n'):
                             outfile.write('\n')
-                            
+                        outfile.write('\n')
                     except Exception as e:
-                        outfile.write(f"!!! Could not read file: {e} !!!\n")
-                    
-                    if include_metadata:
-                        outfile.write(f"\n--- End of {file_path} ---\n\n")
+                        outfile.write(f"[read error: {e}]\n\n")
                 
                 return True
                 
@@ -179,34 +162,21 @@ class CodeBuilder:
     
     def _write_markdown_format(self, output_path: str, files: Set[str], 
                              file_stats: Dict, project_path: str, include_metadata: bool, other_files: Set[str]) -> bool:
-        """Writes output in Markdown format."""
+        """Writes output in Markdown format (minimal):
+        - Other: list of full paths
+        - For each include file: full path (as heading) and fenced code
+        """
         try:
             with open(output_path, 'w', encoding='utf-8') as outfile:
-                if include_metadata:
-                    outfile.write(f"# Codexify - Collected Sources\n\n")
-                    outfile.write(f"**Generated:** {file_stats['generated_at']}  \n")
-                    outfile.write(f"**Total files:** {file_stats['total_files']}  \n")
-                    outfile.write(f"**Total size:** {file_stats['total_size']} bytes\n\n")
-                    outfile.write("---\n\n")
-                # Always write full path lists at the beginning
-                outfile.write("## Include files (full paths)\n\n")
-                for p in sorted(files):
-                    outfile.write(f"- {p}\n")
-                outfile.write("\n## Other files (full paths)\n\n")
+                # Other files
+                outfile.write("## Other files (paths only)\n\n")
                 for p in sorted(other_files or set()):
                     outfile.write(f"- {p}\n")
-                outfile.write("\n---\n\n")
+                outfile.write("\n")
                 
                 for file_path in sorted(files):
                     file_info = file_stats['file_info'][file_path]
-                    
-                    # Always show full path before content
                     outfile.write(f"## {file_path}\n\n")
-                    if include_metadata:
-                        outfile.write(f"**Size:** {file_info['size']} bytes  \n")
-                        outfile.write(f"**Modified:** {datetime.fromtimestamp(file_info['modified']).isoformat()}  \n")
-                        outfile.write(f"**Encoding:** {file_info['encoding']}\n\n")
-                    
                     outfile.write("```\n")
                     
                     try:
@@ -219,7 +189,7 @@ class CodeBuilder:
                             outfile.write(content)
                             
                     except Exception as e:
-                        outfile.write(f"!!! Could not read file: {e} !!!")
+                        outfile.write(f"[read error: {e}]")
                     
                     outfile.write("\n```\n\n")
                 
@@ -231,7 +201,7 @@ class CodeBuilder:
     
     def _write_html_format(self, output_path: str, files: Set[str], 
                           file_stats: Dict, project_path: str, include_metadata: bool, other_files: Set[str]) -> bool:
-        """Writes output in HTML format."""
+        """Writes output in HTML format (minimal)."""
         try:
             with open(output_path, 'w', encoding='utf-8') as outfile:
                 outfile.write("""<!DOCTYPE html>
@@ -251,19 +221,8 @@ class CodeBuilder:
 <body>
 """)
                 
-                if include_metadata:
-                    outfile.write(f"<h1>Codexify - Collected Sources</h1>")
-                    outfile.write(f"<div class='metadata'>")
-                    outfile.write(f"<p><strong>Generated:</strong> {file_stats['generated_at']}</p>")
-                    outfile.write(f"<p><strong>Total files:</strong> {file_stats['total_files']}</p>")
-                    outfile.write(f"<p><strong>Total size:</strong> {file_stats['total_size']} bytes</p>")
-                    outfile.write(f"</div><hr>")
-                # Always write full path lists at the beginning
-                outfile.write("<h2>Include files (full paths)</h2><ul>")
-                for p in sorted(files):
-                    outfile.write(f"<li>{p}</li>")
-                outfile.write("</ul>")
-                outfile.write("<h2>Other files (full paths)</h2><ul>")
+                # Other files (paths only)
+                outfile.write("<h2>Other files (paths only)</h2><ul>")
                 for p in sorted(other_files or set()):
                     outfile.write(f"<li>{p}</li>")
                 outfile.write("</ul><hr>")
@@ -274,12 +233,6 @@ class CodeBuilder:
                     # Always show header with full path
                     outfile.write(f"<div class='file-header'>")
                     outfile.write(f"<div class='file-path'>{file_path}</div>")
-                    if include_metadata:
-                        outfile.write(f"<div class='metadata'>")
-                        outfile.write(f"Size: {file_info['size']} bytes | ")
-                        outfile.write(f"Modified: {datetime.fromtimestamp(file_info['modified']).isoformat()} | ")
-                        outfile.write(f"Encoding: {file_info['encoding']}")
-                        outfile.write(f"</div>")
                     outfile.write(f"</div>")
                     
                     outfile.write(f"<div class='file-content'><pre>")

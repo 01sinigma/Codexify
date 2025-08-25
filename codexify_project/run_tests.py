@@ -14,18 +14,28 @@ from pathlib import Path
 
 def run_command(cmd, description):
     """Run a command and handle errors."""
-    print(f"\n🔄 {description}...")
+    try:
+        print(f"\n{description}...")
+    except Exception:
+        # Fallback without unicode
+        sys.stdout.write("\n" + description + "...\n")
     print(f"Command: {' '.join(cmd)}")
     
     try:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print(f"✅ {description} completed successfully")
+        try:
+            print(f"{description} completed successfully")
+        except Exception:
+            sys.stdout.write(description + " completed successfully\n")
         if result.stdout:
             print("Output:")
             print(result.stdout)
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ {description} failed with exit code {e.returncode}")
+        try:
+            print(f"{description} failed with exit code {e.returncode}")
+        except Exception:
+            sys.stdout.write(f"{description} failed with exit code {e.returncode}\n")
         if e.stdout:
             print("Stdout:")
             print(e.stdout)
@@ -120,38 +130,41 @@ def run_coverage_report():
 
 def run_all_checks(verbose=False, coverage=False, parallel=False):
     """Run all checks and tests."""
-    print("🚀 Starting comprehensive Codexify testing and quality checks...")
+    try:
+        print("Starting comprehensive Codexify testing and quality checks...")
+    except Exception:
+        sys.stdout.write("Starting comprehensive Codexify testing and quality checks...\n")
     
     # Install dependencies
     if not install_test_dependencies():
-        print("❌ Failed to install test dependencies. Aborting.")
+        print("Failed to install test dependencies. Aborting.")
         return False
     
     # Run linting
     if not run_linting():
-        print("❌ Linting failed. Please fix code style issues.")
+        print("Linting failed. Please fix code style issues.")
         return False
     
     # Run type checking
     if not run_type_checking():
-        print("❌ Type checking failed. Please fix type issues.")
+        print("Type checking failed. Please fix type issues.")
         return False
     
     # Run unit tests
     if not run_unit_tests(verbose, coverage, parallel):
-        print("❌ Unit tests failed. Please fix failing tests.")
+        print("Unit tests failed. Please fix failing tests.")
         return False
     
     # Run integration tests
     if not run_integration_tests(verbose):
-        print("❌ Integration tests failed. Please fix failing tests.")
+        print("Integration tests failed. Please fix failing tests.")
         return False
     
     # Generate coverage report if requested
     if coverage:
         run_coverage_report()
     
-    print("\n🎉 All checks completed successfully!")
+    print("\nAll checks completed successfully!")
     return True
 
 

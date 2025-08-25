@@ -21,7 +21,9 @@ class ConfigManager:
         self.tags_file = self.config_dir / "tags.json"
         self.filelists_dir = self.config_dir / "filelists"
         
-        # Ensure directories exist
+        # Volatile mode: keep everything in-memory unless user explicitly exports
+        self.volatile_mode = True
+        # Ensure directories exist (disabled in volatile mode)
         self._ensure_directories()
         
         # Default configuration
@@ -74,6 +76,8 @@ class ConfigManager:
         
         # Load configuration
         self.config = self._load_config()
+        # In-memory session overrides (do not persist on disk)
+        self._session_overrides: Dict[str, Any] = {}
         
         # Load presets and themes
         self.presets = self._load_presets()
@@ -81,11 +85,16 @@ class ConfigManager:
         self.templates = self._load_templates()
         # Format presets (extension sets)
         self.format_presets: Dict[str, List[str]] = self._load_format_presets()
+        # In-memory stores for volatile mode
+        self._workspaces_mem: Dict[str, Dict[str, Any]] = {}
+        self._filelists_mem: Dict[str, Dict[str, Any]] = {}
         # Path presets (absolute file paths for quick include)
         self.path_presets: Dict[str, List[str]] = self._load_path_presets()
     
     def _ensure_directories(self):
         """Creates necessary configuration directories."""
+        if self.volatile_mode:
+            return
         for directory in [self.config_dir, self.presets_dir, self.themes_dir, self.templates_dir, self.workspaces_dir, self.filelists_dir]:
             directory.mkdir(parents=True, exist_ok=True)
     
@@ -119,6 +128,8 @@ class ConfigManager:
     
     def _save_config(self, config: Dict[str, Any]):
         """Saves configuration to file."""
+        if self.volatile_mode:
+            return
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
@@ -136,6 +147,10 @@ class ConfigManager:
         Returns:
             Setting value or default
         """
+        # Session overrides take precedence
+        if key_path in self._session_overrides:
+            return self._session_overrides.get(key_path, default)
+
         keys = key_path.split('.')
         value = self.config
         
@@ -145,6 +160,17 @@ class ConfigManager:
             return value
         except (KeyError, TypeError):
             return default
+
+    # Session override helpers (in-memory only)
+    def set_session_override(self, key_path: str, value: Any):
+        self._session_overrides[key_path] = value
+
+    def clear_session_override(self, key_path: str):
+        if key_path in self._session_overrides:
+            del self._session_overrides[key_path]
+
+    def clear_all_session_overrides(self):
+        self._session_overrides.clear()
     
     def set_setting(self, key_path: str, value: Any):
         """
@@ -227,18 +253,21 @@ class ConfigManager:
             "Docs": [".md", ".rst", ".txt"],
             "Data": [".json", ".yaml", ".yml", ".csv"]
         }
-        try:
-            p = self._format_presets_file()
-            if p.exists():
-                with open(p, 'r', encoding='utf-8') as f:
-                    disk = json.load(f)
-                    if isinstance(disk, dict):
-                        presets.update(disk)
-        except Exception as e:
-            print(f"ConfigManager: Failed to load format presets: {e}")
+        if not self.volatile_mode:
+            try:
+                p = self._format_presets_file()
+                if p.exists():
+                    with open(p, 'r', encoding='utf-8') as f:
+                        disk = json.load(f)
+                        if isinstance(disk, dict):
+                            presets.update(disk)
+            except Exception as e:
+                print(f"ConfigManager: Failed to load format presets: {e}")
         return presets
 
     def _save_format_presets(self):
+        if self.volatile_mode:
+            return
         try:
             with open(self._format_presets_file(), 'w', encoding='utf-8') as f:
                 json.dump(self.format_presets, f, indent=2, ensure_ascii=False)
@@ -278,6 +307,8 @@ class ConfigManager:
         return presets
 
     def _save_path_presets(self):
+        if self.volatile_mode:
+            return
         try:
             with open(self._path_presets_file(), 'w', encoding='utf-8') as f:
                 json.dump(self.path_presets, f, indent=2, ensure_ascii=False)
@@ -655,11 +686,16 @@ class ConfigManager:
     # -------- Workspaces (save/restore full UI state) --------
     def save_workspace(self, name: str, data: Dict[str, Any]):
         """Save a workspace JSON under config/workspaces/{name}.json"""
+        if self.volatile_mode:
+            self._workspaces_mem[name] = data
+            return
         path = self.workspaces_dir / f"{name}.json"
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
     def load_workspace(self, name: str) -> Optional[Dict[str, Any]]:
+        if self.volatile_mode:
+            return self._workspaces_mem.get(name)
         path = self.workspaces_dir / f"{name}.json"
         if not path.exists():
             return None
@@ -667,21 +703,32 @@ class ConfigManager:
             return json.load(f)
 
     def list_workspaces(self) -> List[str]:
+        if self.volatile_mode:
+            return list(self._workspaces_mem.keys())
         return [p.stem for p in self.workspaces_dir.glob('*.json')]
 
     def delete_workspace(self, name: str):
+        if self.volatile_mode:
+            if name in self._workspaces_mem:
+                del self._workspaces_mem[name]
+            return
         path = self.workspaces_dir / f"{name}.json"
         if path.exists():
             path.unlink()
 
     # -------- Exact file list presets (include/other sets) --------
     def save_filelist_preset(self, name: str, include: List[str], other: List[str]):
-        path = self.filelists_dir / f"{name}.json"
         data = {"include": list(sorted(set(include))), "other": list(sorted(set(other)))}
+        if self.volatile_mode:
+            self._filelists_mem[name] = data
+            return
+        path = self.filelists_dir / f"{name}.json"
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
     def load_filelist_preset(self, name: str) -> Optional[Dict[str, Any]]:
+        if self.volatile_mode:
+            return self._filelists_mem.get(name)
         path = self.filelists_dir / f"{name}.json"
         if not path.exists():
             return None
@@ -689,9 +736,15 @@ class ConfigManager:
             return json.load(f)
 
     def list_filelist_presets(self) -> List[str]:
+        if self.volatile_mode:
+            return list(self._filelists_mem.keys())
         return [p.stem for p in self.filelists_dir.glob('*.json')]
 
     def delete_filelist_preset(self, name: str):
+        if self.volatile_mode:
+            if name in self._filelists_mem:
+                del self._filelists_mem[name]
+            return
         path = self.filelists_dir / f"{name}.json"
         if path.exists():
             path.unlink()

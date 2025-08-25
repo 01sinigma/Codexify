@@ -4,7 +4,7 @@ Codexify is a tool for developers to collect, analyze, and manage code from vari
 
 ## Project Status
 
-**Current Version:** v0.5 (Testing & Documentation)
+**Current Version:** v0.5.x (Final Polish in progress)
 
 This version adds comprehensive testing infrastructure, developer documentation, user guides, and code quality tools, making Codexify a production-ready application with professional development practices.
 
@@ -270,6 +270,72 @@ This design ensures that business logic is centralized and reusable, making the 
 - Context-aware Command Palette: показывает релевантные действия для списков файлов (выбор по расширению/паттерну, пресеты, workspaces, bundle, watch).
 - Logs Viewer: кнопка в левом нижнем углу открывает окно логов (поиск/подсветка, копирование, обновление).
 - Instant Formats Reclassify: при изменении форматов файлы сразу переклассифицируются между Include/Other без задержки.
+
+### New in v0.5.x (continued)
+- Hotkeys Management: вкладка в Settings для просмотра/редактирования хоткеев, профили, экспорт/импорт.
+- AI Worker: фоновые вызовы с прогрессом/отменой, кэш и rate‑limit в памяти.
+- Analysis Filters: просмотр горячих файлов с фильтрами (min score, min size, Top N).
+- Full Code Map: многоуровневая Mermaid‑карта (модули/классы/функции, импорты, локальные вызовы), легенда, настройки включения слоёв, навигация к файлам, HTML‑просмотр.
+- Map UX: в HTML‑просмотре добавлены Zoom In/Out, Fit, Reset, панорамирование мышью, масштаб колесом, экспорт PNG (учитывает bbox и отступы), клики по узлам с подсказкой пути и кнопками Copy/Open.
+- Map Fallback (JS/TS): если нет Python‑символов, строится карта файлов/папок со связями по `import`/`require` для *.js/*.ts/*.jsx/*.tsx.
+- Safer IDs: идентификаторы узлов Mermaid санитизируются (A‑Z/0‑9/_), чтобы избежать ошибок парсера.
+- Duplicates Settings: методы поиска, пороги и skip binary; AI‑план рефакторинга по группам.
+- Volatile Mode: конфиг/пресеты/воркспейсы/хоткеи хранятся in‑memory; экспорт/импорт — по желанию пользователя.
+- Tests: smoke‑тест анализа и карты, LLM‑моки, тесты индекса символов и импорт‑графа.
+
+### LLM & AI (OpenAI/Gemini)
+- LLM Settings (вкладка): выбор провайдера (`openai`/`gemini`/`custom`), модель, температура, max tokens, safe mode.
+- Ключи API: поле `API Key (kept in-memory)` с кнопкой Paste (вставить из буфера), чекбоксом Show key (показать символы), кнопками `Save API` (сохранить в конфиг по запросу) и `Test API` (быстрый вызов `ping`).
+- Переключение моделей: пресеты популярных моделей + динамическое обнаружение доступных моделей через публичные API при наличии ключа.
+- Переменные окружения: если поле ключа пустое — читаем `OPENAI_API_KEY` (OpenAI) или `GEMINI_API_KEY` (Gemini).
+- Логи LLM: успехи/ошибки, провайдер, модель, длина запроса — доступны в Logs Viewer.
+- Gemini Thinking: поддержка опционального бюджета размышлений через `llm.gemini_thinking_budget` (0 — отключить).
+
+### UI Logging
+- Добавлены логи на каждую ключевую кнопку/операцию GUI: выбор проекта, анализ, поиск дублей, открытие/сохранение настроек LLM, тест API, генерация карт и др. Все доступны через кнопку `Logs` внизу окна.
+
+---
+
+## How‑To: Настройка LLM
+
+### OpenAI
+1. Получите ключ на странице биллинга OpenAI и задайте переменную окружения:
+   - Windows PowerShell: `setx OPENAI_API_KEY "sk-..."`
+2. В GUI откройте `AI Settings` → вкладка `LLM`:
+   - Provider: `openai`
+   - Модель: выберите из списка (например, `gpt-4o-mini`) или введите вручную
+   - При необходимости вставьте ключ через `Paste` и нажмите `Save API`
+   - `Test API` для проверки
+
+### Gemini
+1. Получите ключ в Google AI Studio и задайте переменную окружения:
+   - Windows PowerShell: `setx GEMINI_API_KEY "..."`
+2. В GUI → `AI Settings` → `LLM`:
+   - Provider: `gemini`
+   - Модель: `gemini-1.5-flash`, `gemini-1.5-pro`, `gemini-2.5-flash` и др. (список обновляется динамически)
+   - Вставьте ключ (или используйте переменную окружения), `Save API` и `Test API`
+3. Опционально: установить `llm.gemini_thinking_budget=0` (отключить размышление) — значение хранится в памяти сессии.
+
+### Custom HTTP
+- Укажите `llm.custom_url` и модель, ключ будет добавлен как `Authorization: Bearer <key>`; тело запроса включает `prompt`, `system`, `temperature`, `max_tokens`.
+
+---
+
+## Mermaid‑карта: использование
+1. Сгенерируйте карту: `Generate Full Code Map (Mermaid)`.
+2. В модальном окне нажмите `Open HTML` для интерактивного просмотра.
+3. Управление: Zoom In/Out, Fit, Reset; колесо — масштаб, зажатая ЛКМ — панорамирование.
+4. `Export PNG` сохраняет картинку в высоком качестве.
+5. Клик по узлу открывает хинт с полным путём и кнопкой `Open`.
+
+---
+
+## Changelog (2025‑08‑25)
+- Исправлено: ошибки f‑string в HTML‑вьюере (полная конкатенация строки без фигурных скобок).
+- Добавлено: подробные логи UI; логи LLM (успех/ошибки).
+- Улучшено: HTML‑карта — пан/зум, экспорт PNG, подсказки, безопасные ID.
+- Добавлено: fallback для JS/TS импортов и карта файлов.
+- Улучшено: LLM Settings — Paste/Show key, Save API, Test API; динамические модели; поддержка env‑переменных.
 
 ### Portable Build (Windows)
 ```powershell

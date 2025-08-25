@@ -9,8 +9,8 @@
     "requirements": {
       "projects_loaded": 1
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-08-25T08:40:19.576913",
     "progress": {}
   },
   "project_explorer": {
@@ -51,8 +51,8 @@
     "requirements": {
       "max_files_in_project": 100
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-08-25T08:40:19.576923",
     "progress": {}
   },
   "file_hoarder": {
@@ -177,8 +177,8 @@
     "requirements": {
       "collections_created": 1
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-08-25T08:42:33.273034",
     "progress": {}
   },
   "collection_master": {

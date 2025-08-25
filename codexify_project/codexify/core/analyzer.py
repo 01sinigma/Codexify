@@ -1,6 +1,7 @@
 import os
 import re
 from typing import Dict, List, Set, Tuple
+import concurrent.futures
 from pathlib import Path
 from collections import defaultdict, Counter
 from datetime import datetime
@@ -76,13 +77,27 @@ class ProjectAnalyzer:
         
         print(f"Analyzer: Analyzing {len(file_paths)} files...")
         
+        # Build components
+        summary = self._get_summary_stats(file_paths)
+        languages = self._analyze_languages(file_paths)
+        file_types = self._categorize_files(file_paths)
+        structure = self._analyze_structure(file_paths, project_path)
+        complexity = self._analyze_complexity(file_paths)
+        quality = self._calculate_quality_metrics(file_paths)
+        symbols = self._index_symbols(file_paths)
+        import_graph = self._build_import_graph(file_paths)
+        hot_files = self._compute_hot_files(file_paths, import_graph)
+
         analysis = {
             'summary': self._get_summary_stats(file_paths),
-            'languages': self._analyze_languages(file_paths),
-            'file_types': self._categorize_files(file_paths),
-            'structure': self._analyze_structure(file_paths, project_path),
-            'complexity': self._analyze_complexity(file_paths),
-            'quality_metrics': self._calculate_quality_metrics(file_paths),
+            'languages': languages,
+            'file_types': file_types,
+            'structure': structure,
+            'complexity': complexity,
+            'quality_metrics': quality,
+            'symbols': symbols,
+            'import_graph': import_graph,
+            'hot_files': hot_files,
             'generated_at': datetime.now().isoformat()
         }
         
@@ -273,6 +288,135 @@ class ProjectAnalyzer:
             'total_code_lines': total_code_lines,
             'total_empty_lines': total_empty_lines
         }
+
+    def _index_symbols(self, file_paths: Set[str]) -> Dict:
+        """Builds a simple symbol index (modules/classes/functions) for supported languages.
+        Currently focuses on Python; other languages are counted heuristically by filenames.
+        """
+        index = {
+            'python': {
+                'modules': {},  # module -> {'classes': [...], 'functions': [...]}
+            },
+            'others': {}
+        }
+        try:
+            import ast, os
+            py_files = [p for p in file_paths if p.endswith('.py') and os.path.exists(p)]
+            def worker(path: str):
+                try:
+                    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                        tree = ast.parse(f.read(), filename=path)
+                    mod = os.path.splitext(os.path.basename(path))[0]
+                    classes = []
+                    funcs = []
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.ClassDef):
+                            classes.append(node.name)
+                        elif isinstance(node, ast.FunctionDef):
+                            funcs.append(node.name)
+                    return (mod, path, sorted(set(classes)), sorted(set(funcs)))
+                except Exception:
+                    return None
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+                for res in ex.map(worker, py_files):
+                    if not res:
+                        continue
+                    mod, path, classes, funcs = res
+                    index['python']['modules'][mod] = {
+                        'path': path,
+                        'classes': classes,
+                        'functions': funcs
+                    }
+        except Exception:
+            pass
+        return index
+
+    def _build_import_graph(self, file_paths: Set[str]) -> Dict:
+        """Builds a simple import graph for Python files."""
+        edges = []
+        try:
+            import ast, os
+            py_files = [p for p in file_paths if p.endswith('.py') and os.path.exists(p)]
+            def worker(path: str):
+                out = []
+                try:
+                    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                        tree = ast.parse(f.read(), filename=path)
+                    mod = os.path.splitext(os.path.basename(path))[0]
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.Import):
+                            for a in node.names:
+                                out.append((mod, a.name.split('.')[0]))
+                        elif isinstance(node, ast.ImportFrom) and node.module:
+                            out.append((mod, node.module.split('.')[0]))
+                except Exception:
+                    return []
+                return out
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+                for lst in ex.map(worker, py_files):
+                    edges.extend(lst)
+        except Exception:
+            pass
+        return {'edges': edges}
+
+    def _compute_hot_files(self, file_paths: Set[str], import_graph: Dict) -> List[Dict]:
+        """Computes a simple 'hotness' score per file combining size, line count and import degree."""
+        try:
+            import os
+        except Exception:
+            return []
+
+        # Gather size and line counts (approx)
+        sizes = {}
+        lines = {}
+        for p in file_paths:
+            try:
+                sizes[p] = os.path.getsize(p)
+            except Exception:
+                sizes[p] = 0
+            # quick line estimate for text files
+            if self._is_text_file(p):
+                lines[p] = self._count_lines(p)
+            else:
+                lines[p] = 0
+
+        # Import degrees
+        out_deg = {}
+        in_deg = {}
+        edges = import_graph.get('edges', []) if isinstance(import_graph, dict) else []
+        for a, b in edges:
+            out_deg[a] = out_deg.get(a, 0) + 1
+            in_deg[b] = in_deg.get(b, 0) + 1
+
+        # Normalize and score
+        def norm(d):
+            vals = list(d.values()) or [1]
+            m = max(vals) or 1
+            return {k: (v / m) for k, v in d.items()}
+
+        n_size = norm(sizes)
+        n_lines = norm(lines)
+        # Map module to file (python only); fallback by basename
+        module_to_file = {}
+        for p in file_paths:
+            module_to_file[os.path.splitext(os.path.basename(p))[0]] = p
+        deg = {}
+        for k, v in out_deg.items():
+            p = module_to_file.get(k)
+            if p:
+                deg[p] = deg.get(p, 0) + v
+        for k, v in in_deg.items():
+            p = module_to_file.get(k)
+            if p:
+                deg[p] = deg.get(p, 0) + v
+        n_deg = norm(deg)
+
+        hot = []
+        for p in file_paths:
+            score = 0.5 * n_size.get(p, 0) + 0.3 * n_lines.get(p, 0) + 0.2 * n_deg.get(p, 0)
+            hot.append({'path': p, 'score': round(score, 4), 'size': sizes.get(p, 0), 'lines': lines.get(p, 0)})
+        hot.sort(key=lambda x: x['score'], reverse=True)
+        return hot[:50]
 
     def _is_text_file(self, file_path: str) -> bool:
         """Determines if a file is a text file."""

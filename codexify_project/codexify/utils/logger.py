@@ -51,3 +51,16 @@ def get_in_memory_logs() -> str:
     _ensure_handlers()
     return "\n".join(_buffer)
 
+def clear_in_memory_logs():
+    """Clears in-memory log buffer."""
+    global _buffer
+    _buffer = []
+
+def set_log_level(level: str):
+    """Sets log level for codexify root logger and its handlers."""
+    _ensure_handlers()
+    lvl = getattr(logging, level.upper(), logging.INFO)
+    root = logging.getLogger("codexify")
+    root.setLevel(lvl)
+    for h in root.handlers:
+        h.setLevel(lvl)

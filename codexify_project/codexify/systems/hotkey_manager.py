@@ -40,10 +40,13 @@ class HotkeyManager:
         self.data_dir = Path(data_dir)
         self.hotkeys_file = self.data_dir / "hotkeys.json"
         self.profiles_dir = self.data_dir / "profiles"
+        # volatile mode: do not write to disk unless explicit export
+        self.volatile_mode = True
         
-        # Ensure directory exists
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.profiles_dir.mkdir(parents=True, exist_ok=True)
+        # Ensure directory exists (disabled in volatile mode)
+        if not self.volatile_mode:
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            self.profiles_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize hotkeys
         self.hotkeys = self._load_hotkeys()
@@ -59,7 +62,7 @@ class HotkeyManager:
     
     def _load_hotkeys(self) -> Dict[str, Hotkey]:
         """Loads or creates default hotkeys."""
-        if self.hotkeys_file.exists():
+        if (not self.volatile_mode) and self.hotkeys_file.exists():
             try:
                 with open(self.hotkeys_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
@@ -258,9 +261,9 @@ class HotkeyManager:
     
     def _load_profiles(self) -> Dict[str, Dict[str, Any]]:
         """Loads available hotkey profiles."""
-        profiles = {}
-        
-        if self.profiles_dir.exists():
+        profiles: Dict[str, Dict[str, Any]] = {}
+        # Load from disk if not volatile
+        if (not self.volatile_mode) and self.profiles_dir.exists():
             for profile_file in self.profiles_dir.glob("*.json"):
                 try:
                     with open(profile_file, 'r', encoding='utf-8') as f:
@@ -269,12 +272,25 @@ class HotkeyManager:
                         profiles[profile_name] = profile_data
                 except Exception as e:
                     print(f"HotkeyManager: Error loading profile {profile_file}: {e}")
-        
-        # Add default profile if none exists
+        # Ensure default exists
         if not profiles:
-            self._create_default_profile()
-            profiles = self._load_profiles()
-        
+            if self.volatile_mode:
+                profiles["default"] = {
+                    "name": "Default",
+                    "description": "Default Codexify hotkey profile",
+                    "created_at": "2024-01-01T00:00:00",
+                    "hotkeys": {}
+                }
+            else:
+                self._create_default_profile()
+                # Try load again from disk
+                try:
+                    for profile_file in self.profiles_dir.glob("*.json"):
+                        with open(profile_file, 'r', encoding='utf-8') as f:
+                            profile_data = json.load(f)
+                            profiles[profile_file.stem] = profile_data
+                except Exception as e:
+                    print(f"HotkeyManager: Error loading default profile: {e}")
         return profiles
     
     def _create_default_profile(self):
@@ -285,23 +301,28 @@ class HotkeyManager:
             "created_at": "2024-01-01T00:00:00",
             "hotkeys": {}
         }
-        
-        profile_file = self.profiles_dir / "default.json"
-        try:
-            with open(profile_file, 'w', encoding='utf-8') as f:
-                json.dump(default_profile, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"HotkeyManager: Error creating default profile: {e}")
+        if self.volatile_mode:
+            # Store in-memory
+            self.profiles = {"default": default_profile}
+            self.current_profile = "default"
+        else:
+            profile_file = self.profiles_dir / "default.json"
+            try:
+                with open(profile_file, 'w', encoding='utf-8') as f:
+                    json.dump(default_profile, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                print(f"HotkeyManager: Error creating default profile: {e}")
     
     def _save_hotkeys(self, hotkeys: Dict[str, Hotkey]):
         """Saves hotkeys to file."""
+        if self.volatile_mode:
+            return
         try:
             data = {}
             for hotkey_id, hotkey in hotkeys.items():
                 hotkey_dict = asdict(hotkey)
                 hotkey_dict['modifiers'] = [mod.value for mod in hotkey.modifiers]
                 data[hotkey_id] = hotkey_dict
-            
             with open(self.hotkeys_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
@@ -309,6 +330,8 @@ class HotkeyManager:
     
     def _save_profiles(self):
         """Saves profiles to files."""
+        if self.volatile_mode:
+            return
         for profile_name, profile_data in self.profiles.items():
             profile_file = self.profiles_dir / f"{profile_name}.json"
             try:
@@ -524,12 +547,13 @@ class HotkeyManager:
     def delete_profile(self, profile_name: str):
         """Deletes a hotkey profile."""
         if profile_name in self.profiles:
-            profile_file = self.profiles_dir / f"{profile_name}.json"
-            if profile_file.exists():
-                try:
-                    profile_file.unlink()
-                except Exception as e:
-                    print(f"HotkeyManager: Error deleting profile file: {e}")
+            if not self.volatile_mode:
+                profile_file = self.profiles_dir / f"{profile_name}.json"
+                if profile_file.exists():
+                    try:
+                        profile_file.unlink()
+                    except Exception as e:
+                        print(f"HotkeyManager: Error deleting profile file: {e}")
             
             del self.profiles[profile_name]
     

@@ -111,20 +111,18 @@ def scan_directory(path: str,
                     ignored_count += 1
                     continue
                 
-                # Check file size
+                # Check file size (record, but do not exclude from listing)
                 try:
                     file_size = os.path.getsize(file_path)
                     if file_size > max_file_size:
                         size_ignored_count += 1
-                        continue
                 except OSError:
                     # Skip files we can't access
                     continue
                 
-                # Check if binary file
+                # Check if binary file (record, but do not exclude from listing)
                 if skip_binary and _is_binary_file(file_path):
                     binary_count += 1
-                    continue
                 
                 found_files.add(file_path)
                 
@@ -134,7 +132,9 @@ def scan_directory(path: str,
         print(f"Scanner: Error during scanning: {e}")
     
     print(f"Scanner: Found {len(found_files)} files")
-    print(f"Scanner: Ignored {ignored_count} files (patterns), {binary_count} binary files, {size_ignored_count} large files")
+    print(f"Scanner: Ignored {ignored_count} files (patterns)")
+    if binary_count or size_ignored_count:
+        print(f"Scanner: Also detected {binary_count} binary and {size_ignored_count} large files (listed anyway)")
     
     return found_files
 

@@ -185,6 +185,28 @@ class CodexifyToolbar(Toolbar):
             }
         ]
         
+        # AI group
+        ai_actions = [
+            {
+                'name': 'ai_explain',
+                'text': '🧠 Explain (AI)',
+                'command': None,
+                'tooltip': 'Explain project using configured LLM'
+            },
+            {
+                'name': 'ai_map',
+                'text': '🗺️ Code Map',
+                'command': None,
+                'tooltip': 'Generate full Mermaid code map'
+            },
+            {
+                'name': 'ai_settings',
+                'text': '🔑 AI Settings',
+                'command': None,
+                'tooltip': 'Configure LLM provider and API key'
+            }
+        ]
+        
         # Settings group
         settings_actions = [
             {
@@ -205,6 +227,8 @@ class CodexifyToolbar(Toolbar):
         self.add_action_group("Project", project_actions)
         self.add_separator()
         self.add_action_group("Analysis", analysis_actions)
+        self.add_separator()
+        self.add_action_group("AI", ai_actions)
         self.add_separator()
         self.add_action_group("Output", output_actions)
         self.add_separator()
@@ -230,6 +254,15 @@ class CodexifyToolbar(Toolbar):
             self.buttons['collect_code'].configure(command=collect_callback)
         if 'export_report' in self.buttons:
             self.buttons['export_report'].configure(command=export_callback)
+    
+    def set_ai_actions(self, explain_callback, map_callback, settings_callback):
+        """Set callbacks for AI actions."""
+        if 'ai_explain' in self.buttons:
+            self.buttons['ai_explain'].configure(command=explain_callback)
+        if 'ai_map' in self.buttons:
+            self.buttons['ai_map'].configure(command=map_callback)
+        if 'ai_settings' in self.buttons:
+            self.buttons['ai_settings'].configure(command=settings_callback)
     
     def set_settings_actions(self, settings_callback, help_callback):
         """Set callbacks for settings actions."""

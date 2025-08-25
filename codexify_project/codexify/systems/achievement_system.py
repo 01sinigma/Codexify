@@ -271,7 +271,12 @@ class AchievementSystem:
         if self.stats_file.exists():
             try:
                 with open(self.stats_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    # Normalize types after JSON (sets were saved as lists)
+                    for key in ("unique_formats_used", "formats_used"):
+                        if key in data and isinstance(data[key], list):
+                            data[key] = set(data[key])
+                    return data
             except Exception as e:
                 print(f"AchievementSystem: Error loading stats: {e}")
         
@@ -461,9 +466,17 @@ class AchievementSystem:
                     if not self._check_fast_processing(req_value):
                         return False
                 else:
-                    # Handle other dict requirements
+                    # Handle other dict requirements with numeric comparisons
                     for sub_key, sub_value in req_value.items():
-                        if sub_key not in current_value or current_value[sub_key] < sub_value:
+                        if sub_key not in current_value:
+                            return False
+                        sub_curr = current_value[sub_key]
+                        if isinstance(sub_curr, (list, set, dict)):
+                            sub_curr = len(sub_curr)
+                        try:
+                            if sub_curr < sub_value:
+                                return False
+                        except Exception:
                             return False
             elif isinstance(req_value, list):
                 # Handle list requirements like formats_used
@@ -471,11 +484,21 @@ class AchievementSystem:
                     if not all(fmt in current_value for fmt in req_value):
                         return False
                 else:
-                    if current_value < req_value:
+                    # Fallback: require all elements present if current_value is collection
+                    if isinstance(current_value, (list, set)):
+                        if not all(x in current_value for x in req_value):
+                            return False
+                    else:
                         return False
             else:
                 # Handle simple numeric requirements
-                if current_value < req_value:
+                comp_value = current_value
+                if isinstance(comp_value, (list, set, dict)):
+                    comp_value = len(comp_value)
+                try:
+                    if comp_value < req_value:
+                        return False
+                except Exception:
                     return False
         
         return True
