@@ -261,8 +261,11 @@ class MainWindow(BaseTk):
         # Action buttons
         theme.create_styled_button(ai_btns, 'Explain Project (AI)', command=self._ai_explain_project).pack(fill=tk.X)
         theme.create_styled_button(ai_btns, 'Generate Import Map (Mermaid)', command=self._ai_generate_map).pack(fill=tk.X, pady=(6,0))
+        theme.create_styled_button(ai_btns, 'AI Code Map (Gemini)', command=self._ai_code_map).pack(fill=tk.X, pady=(6,0))
         theme.create_styled_button(ai_btns, 'Generate Full Code Map (Mermaid)', command=self._generate_full_code_map).pack(fill=tk.X, pady=(6,0))
         theme.create_styled_button(ai_btns, 'Map Settings', command=self._open_map_settings).pack(fill=tk.X, pady=(6,0))
+        theme.create_styled_button(ai_btns, 'AI Explain Node', command=self._ai_explain_node).pack(fill=tk.X, pady=(6,0))
+        theme.create_styled_button(ai_btns, 'AI Cluster Map', command=self._ai_cluster_map).pack(fill=tk.X, pady=(6,0))
         theme.create_styled_button(ai_btns, 'Annotate Map (AI)', command=self._ai_annotate_map).pack(fill=tk.X, pady=(6,0))
         theme.create_styled_button(ai_btns, 'Open LLM Settings', command=self.show_llm_settings).pack(fill=tk.X, pady=(6,0))
         ai_frame.pack(fill=tk.X)
@@ -536,6 +539,10 @@ class MainWindow(BaseTk):
         If a folder is dropped, scan it shallowly for files; absolute paths required.
         """
         import os
+        try:
+            self.log.info(f'UI: external add_paths target={target} | count={len(paths)}')
+        except Exception:
+            pass
         collected = set()
         for p in paths:
             if os.path.isdir(p):
@@ -545,6 +552,10 @@ class MainWindow(BaseTk):
             elif os.path.isfile(p):
                 collected.add(p)
         if collected:
+            try:
+                self.log.info(f'UI: collected files from drop/paste | total={len(collected)}')
+            except Exception:
+                pass
             if target == 'include':
                 # apply same policy as manual move
                 self._move_selected(self.include_list, 'include')  # reuse path
@@ -563,6 +574,10 @@ class MainWindow(BaseTk):
                 if exts - active:
                     self.engine.set_active_formats(active | exts)
                 self.engine.events.post(FILES_UPDATED)
+            try:
+                self.log.info(f'UI: add_paths applied | target={target} | include={len(self.engine.state.include_files)} other={len(self.engine.state.other_files)}')
+            except Exception:
+                pass
 
     def _remove_selected(self, list_widget: FileList):
         files = list_widget.get_selected_files()
@@ -1079,8 +1094,177 @@ class MainWindow(BaseTk):
         if len(lines) == 1:
             lines.append('	Empty[No graph data]')
         mermaid = "\n".join(lines)
+        # Apply layout directive (spacing/orientation)
+        try:
+            orient = (self.engine.get_setting('map.orientation', 'LR') or 'LR').upper()
+            node_sp = int(self.engine.get_setting('map.node_spacing', 35) or 35)
+            rank_sp = int(self.engine.get_setting('map.rank_spacing', 120) or 120)
+        except Exception:
+            orient, node_sp, rank_sp = 'LR', 35, 120
+        mermaid = f"%%{{init: {{ 'flowchart': {{ 'nodeSpacing': {node_sp}, 'rankSpacing': {rank_sp}, 'htmlLabels': true }} }} }}%%\n" + mermaid.replace('graph TD', f'graph {orient}')
         self._last_mermaid = mermaid
         self._show_text_modal('Import Map (Mermaid)', mermaid, mermaid=True)
+
+    def _ai_code_map(self):
+        """Use LLM to infer a high-level code map (Mermaid) from metadata only."""
+        try:
+            self.log.info('UI: AI code map')
+        except Exception:
+            pass
+        if not self.engine.state.all_discovered_files:
+            messagebox.showwarning('AI', 'No project loaded.')
+            return
+        # Build safe metadata: file paths (relative), extensions, and simple imports (python) if available
+        proj = self.engine.state.project_path or ''
+        files = list(self.engine.state.include_files or self.engine.state.all_discovered_files)
+        rel_files = []
+        from pathlib import Path
+        exts = {}
+        for p in files[:1000]:
+            try:
+                rel = os.path.relpath(p, proj) if proj and os.path.exists(p) else os.path.basename(p)
+                rel_files.append(rel)
+                e = Path(p).suffix.lower()
+                exts[e] = exts.get(e,0)+1
+            except Exception:
+                continue
+        # small heuristic import pairs
+        imports = []
+        try:
+            import ast
+            for p in files[:300]:
+                if p.endswith('.py') and os.path.exists(p):
+                    try:
+                        with open(p,'r',encoding='utf-8',errors='ignore') as f:
+                            tree = ast.parse(f.read(), filename=p)
+                        mod = os.path.splitext(os.path.basename(p))[0]
+                        for node in ast.walk(tree):
+                            if isinstance(node, ast.Import):
+                                for a in node.names:
+                                    imports.append((mod, a.name.split('.')[0]))
+                            elif isinstance(node, ast.ImportFrom) and node.module:
+                                imports.append((mod, node.module.split('.')[0]))
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        # Determine input mode
+        mode = str(self.engine.get_setting('llm.ai_map_mode', 'minimal')).lower()
+        # Prompt LLM to produce a Mermaid graph with groups and edges
+        import json as _json
+        if mode == 'extended':
+            # Include simple symbol map from analysis if available
+            sym = {}
+            try:
+                data = getattr(self, '_last_analysis', {})
+                sym = (data.get('symbols') or {}).get('python', {}).get('modules', {})
+                # shrink
+                slim = {}
+                for m, meta in list(sym.items())[:400]:
+                    slim[m] = {
+                        'classes': (meta.get('classes') or [])[:10],
+                        'functions': (meta.get('functions') or [])[:15],
+                        'path': meta.get('path','')
+                    }
+                sym = slim
+            except Exception:
+                sym = {}
+            payload = {
+                'files': rel_files[:1000],
+                'exts': exts,
+                'imports': imports[:1000],
+                'symbols': sym
+            }
+            prompt = (
+                'You are an expert software architect. Given project metadata including files, extensions, import pairs '
+                'and an optional lightweight symbol map (modules/classes/functions), generate a clean Mermaid flowchart: '
+                'use subgraphs per top-folder or subsystem, short labels, dotted edges for imports, solid for contains. '
+                'Return ONLY Mermaid starting with graph LR or graph TD.\n\n' + _json.dumps(payload, ensure_ascii=False)
+            )
+        else:
+            prompt = (
+                'You are an expert software architect. Using ONLY the provided metadata (relative paths, extensions, '
+                'and a few python import pairs), produce a concise Mermaid flowchart that groups files by top folders '
+                '(subgraphs) and connects modules by imports. Keep labels short. Return ONLY Mermaid, starting with "graph LR".\n\n'
+                f'Relative files (sample up to 1000):\n{_json.dumps(rel_files[:1000], ensure_ascii=False)}\n\n'
+                f'Extensions histogram:\n{_json.dumps(exts, ensure_ascii=False)}\n\n'
+                f'Import pairs (module -> module):\n{_json.dumps(imports[:800], ensure_ascii=False)}\n'
+            )
+        # Payload size/Chunking (defensive)
+        try:
+            if len(prompt) > 180_000:
+                prompt = prompt[:180_000]
+        except Exception:
+            pass
+        try:
+            self.log.info(f'AI map: mode={mode} | files={len(rel_files)} imports={len(imports)} promptChars={len(prompt)}')
+        except Exception:
+            pass
+        # Run via LLM provider (Gemini/OpenAI)
+        try:
+            from codexify.utils.llm import LLMProvider
+            llm = LLMProvider()
+            try:
+                self.log.info('AI map: sending request to LLM')
+            except Exception:
+                pass
+            out = llm.summarize(prompt, 'Output only Mermaid code without commentary. Start with graph LR or graph TD. Use short labels.')
+            try:
+                self.log.info(f'AI map: response received | chars={len(out or "")}')
+            except Exception:
+                pass
+        except Exception as e:
+            out = f"graph LR\nA[AI error]|{str(e).replace('"','')}|B[Check API settings]"
+        # Validate and auto-fix Mermaid
+        text = out.strip()
+        def _validate_and_fix(src: str):
+            try:
+                s = (src or '').strip()
+                if s.startswith('```'):
+                    # strip markdown fences
+                    s = s.strip('`')
+                s = s.replace('\r','').replace('→','->').replace('—>','->').replace('–>','->')
+                if not s.startswith('graph '):
+                    pos = s.find('graph ')
+                    s = s[pos:] if pos >= 0 else ('graph LR\n' + s)
+                import re
+                s = re.sub(r'(\w)\s*->\s*(\w)', r"\1 --> \2", s)
+                opens = len(re.findall(r'\bsubgraph\b', s))
+                closes = len(re.findall(r'\bend\b', s))
+                if closes < opens:
+                    s += '\n' + ('\n'.join(['end'] * (opens - closes))) + '\n'
+                ok = s.startswith('graph ')
+                return s, ok
+            except Exception:
+                return src, False
+        text, ok = _validate_and_fix(text)
+        retried = False
+        if not ok:
+            try:
+                from codexify.utils.llm import LLMProvider
+                llm = LLMProvider()
+                fix_prompt = 'Fix to valid Mermaid (start with graph LR/TD, add missing end):\n\n' + text[:12000]
+                fixed = llm.summarize(fix_prompt, 'Return only Mermaid.')
+                text, _ = _validate_and_fix(fixed)
+                retried = True
+            except Exception:
+                pass
+        try:
+            self.log.info(f'AI map: validatedChars={len(text)} | validatorOk={ok} | retried={retried}')
+        except Exception:
+            pass
+        try:
+            # apply current spacing/orientation
+            orient = (self.engine.get_setting('map.orientation', 'LR') or 'LR').upper()
+            node_sp = int(self.engine.get_setting('map.node_spacing', 35) or 35)
+            rank_sp = int(self.engine.get_setting('map.rank_spacing', 120) or 120)
+        except Exception:
+            orient, node_sp, rank_sp = 'LR', 35, 120
+        if text.startswith('graph '):
+            text = text.replace('graph TD', f'graph {orient}').replace('graph LR', f'graph {orient}')
+        text = f"%%{{init: {{ 'flowchart': {{ 'nodeSpacing': {node_sp}, 'rankSpacing': {rank_sp}, 'htmlLabels': true }} }} }}%%\n" + text
+        self._last_mermaid = text
+        self._show_text_modal('AI Code Map (Mermaid)', text, mermaid=True)
 
     def _ai_annotate_map(self):
         try:
@@ -1097,6 +1281,95 @@ class MainWindow(BaseTk):
             f'{self._last_mermaid[:12000]}'
         )
         self._run_ai_task(prompt, 'Be concise and technical.', 'AI Map Annotations')
+
+    def _ai_explain_node(self):
+        try:
+            self.log.info('UI: AI explain node')
+        except Exception:
+            pass
+        if not hasattr(self, '_last_mermaid'):
+            messagebox.showinfo('AI', 'Generate the map first.')
+            return
+        # Ask user for a node id (simple prompt), later we can integrate with selection UI
+        top = tk.Toplevel(self)
+        top.title('Explain Node (AI)')
+        frm = theme.create_styled_frame(top)
+        frm.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        ttk.Label(frm, text='Node ID (exact):').pack(anchor=tk.W)
+        var = tk.StringVar()
+        ent = ttk.Entry(frm, textvariable=var)
+        ent.pack(fill=tk.X)
+        def go():
+            node_id = (var.get() or '').strip()
+            if not node_id:
+                top.destroy()
+                return
+            top.destroy()
+            # Build neighbor context from mermaid text (rough extraction)
+            text = self._last_mermaid
+            neighbors = []
+            try:
+                for line in text.splitlines():
+                    if '-->' in line or '-.->' in line:
+                        if node_id in line:
+                            neighbors.append(line.strip())
+            except Exception:
+                pass
+            # Path if known
+            path = ''
+            try:
+                path = (getattr(self, '_last_nodes_map', {}) or {}).get(node_id, '')
+            except Exception:
+                path = ''
+            meta = {
+                'node_id': node_id,
+                'path': path,
+                'neighbors': neighbors[:30]
+            }
+            import json as _json
+            prompt = (
+                'Explain the role of the node in the project based on its ID, optional file path, '
+                'and edges involving it from a Mermaid graph. Be concise: 6-10 bullets, then risks (2-4 bullets), '
+                'then suggested refactors (3-5 bullets).\n\n'
+                f'{_json.dumps(meta, ensure_ascii=False)}'
+            )
+            self._run_ai_task(prompt, 'Be concise and technical.', f"AI Explain Node: {node_id}")
+        theme.create_styled_button(frm, 'Explain', command=go).pack(anchor=tk.E, pady=(8,0))
+        ent.focus_set()
+
+    def _ai_cluster_map(self):
+        try:
+            self.log.info('UI: AI cluster map')
+        except Exception:
+            pass
+        if not hasattr(self, '_last_mermaid'):
+            messagebox.showinfo('AI', 'Generate the map first.')
+            return
+        # Prepare prompt
+        prompt = (
+            'You will receive a Mermaid flowchart graph. Cluster nodes into logical subsystems using subgraphs, '
+            'assign distinct light background colors to clusters (via classDef), keep edges, keep labels short. '
+            'Return ONLY Mermaid code. Start with "graph LR" or "graph TD". Max ~250 lines.\n\n'
+            f'{self._last_mermaid[:12000]}'
+        )
+        try:
+            from codexify.utils.llm import LLMProvider
+            llm = LLMProvider()
+            out = llm.summarize(prompt, 'Return only valid Mermaid; avoid prose.')
+        except Exception as e:
+            out = f"graph LR\nA[AI error]-->|{str(e).replace('"','')}|B[Check API settings]"
+        text = (out or '').strip()
+        try:
+            orient = (self.engine.get_setting('map.orientation', 'LR') or 'LR').upper()
+            node_sp = int(self.engine.get_setting('map.node_spacing', 35) or 35)
+            rank_sp = int(self.engine.get_setting('map.rank_spacing', 120) or 120)
+        except Exception:
+            orient, node_sp, rank_sp = 'LR', 35, 120
+        if text.startswith('graph '):
+            text = text.replace('graph TD', f'graph {orient}').replace('graph LR', f'graph {orient}')
+        text = f"%%{{init: {{ 'flowchart': {{ 'nodeSpacing': {node_sp}, 'rankSpacing': {rank_sp}, 'htmlLabels': true }} }} }}%%\n" + text
+        self._last_mermaid = text
+        self._show_text_modal('AI Clustered Map (Mermaid)', text, mermaid=True)
 
     def _show_text_modal(self, title: str, text: str, mermaid: bool = False, nodes_map: dict = None, legend_text: str = None):
         top = tk.Toplevel(self)
@@ -1123,6 +1396,11 @@ class MainWindow(BaseTk):
                 pass
         theme.create_styled_button(tbar, self._('Copy'), command=do_copy).pack(side=tk.RIGHT)
         if mermaid:
+            # keep last nodes map for AI Explain Node
+            try:
+                self._last_nodes_map = nodes_map or {}
+            except Exception:
+                pass
             theme.create_styled_button(tbar, self._('Open HTML'), command=lambda: self._open_mermaid_html(text, nodes_map or {})).pack(side=tk.RIGHT, padx=(6,0))
         body = theme.create_styled_frame(frm)
         body.pack(fill=tk.BOTH, expand=True)
@@ -1170,12 +1448,16 @@ class MainWindow(BaseTk):
                 leg.insert('1.0', legend_text)
                 leg.configure(state='disabled')
 
-    def _open_mermaid_html(self, mermaid_text: str, node_to_path: dict | None = None):
+    def _open_mermaid_html(self, mermaid_text: str, node_to_path: dict | None = None, graph_data: dict | None = None):
         # Create temporary HTML with Mermaid CDN
         try:
             mapping_json = json.dumps(node_to_path or {}, ensure_ascii=False)
         except Exception:
             mapping_json = '{}'
+        try:
+            graph_json = json.dumps(graph_data or {}, ensure_ascii=False)
+        except Exception:
+            graph_json = '{}'
         html = ("<!DOCTYPE html>\n"
 "<html>\n"
 "<head>\n"
@@ -1184,85 +1466,131 @@ class MainWindow(BaseTk):
 "  <title>Codexify Mermaid Preview</title>\n"
 "  <script src='https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js'></script>\n"
 "  <style>\n"
-"    body{margin:0;padding:12px;font-family:Segoe UI,Arial,sans-serif;background:#fafafa;}\n"
-"    .toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px;}\n"
-"    #view{position:relative; width:100%; height:calc(100vh - 60px); background:#fff; border:1px solid #ddd; overflow:hidden;}\n"
+"    body{margin:0;padding:12px;font-family:Segoe UI,Arial,sans-serif;background:#111;color:#ddd;}\n"
+"    .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;}\n"
+"    .tools-left{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}\n"
+"    .tools-right{display:flex;gap:6px;align-items:center;}\n"
+"    input[type=text], select{padding:6px 8px;border:1px solid #444;border-radius:6px;background:#1b1b1b;color:#ddd;}\n"
+"    input[type=range]{width:120px;}\n"
+"    label{font-size:12px;opacity:.9;margin-right:6px;}\n"
+"    button{padding:6px 10px;border:1px solid #444;border-radius:6px;background:#1f2937;color:#eee;cursor:pointer;}\n"
+"    button:hover{background:#263241;}\n"
+"    #view{position:relative; width:100%; height:calc(100vh - 92px); background:#0c0c0c; border-top:1px solid #222; overflow:hidden;}\n"
 "    #view svg{user-select:none; cursor:grab;}\n"
-"    .hint{position:fixed;left:16px;bottom:16px;background:#fff;border:1px solid #ccc;border-radius:6px;padding:10px;box-shadow:0 2px 8px rgba(0,0,0,.08);max-width:70%;display:none;}\n"
+"    .hint{position:fixed;left:16px;bottom:16px;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px;box-shadow:0 2px 8px rgba(0,0,0,.25);max-width:70%;display:none;color:#e5e7eb;}\n"
 "    .hint strong{display:block;margin-bottom:6px;}\n"
 "    .hint button{margin-right:8px;}\n"
+"    .dim{opacity:.15} .match{outline:2px solid #60a5fa;outline-offset:2px;}\n"
+"    #ctx{position:fixed;display:none;background:#0f172a;border:1px solid #334155;border-radius:6px;min-width:180px;z-index:10;box-shadow:0 4px 18px rgba(0,0,0,.35);}\n"
+"    #ctx button{display:block;width:100%;text-align:left;background:transparent;border:0;padding:8px 10px;}\n"
+"    #ctx button:hover{background:#1e293b;}\n"
+"    #mini{position:fixed;right:12px;bottom:12px;border:1px solid #334155;background:#0f172a;border-radius:6px;width:220px;height:160px;}\n"
+"    #prog{position:fixed;left:50%;bottom:52px;transform:translateX(-50%);width:320px;height:10px;border:1px solid #334155;background:#0f172a;border-radius:6px;overflow:hidden;display:none;}\n"
+"    #progBar{height:100%;width:0%;background:#38bdf8;}\n"
+"    #progPct{position:fixed;left:50%;bottom:66px;transform:translateX(-50%);font-size:12px;color:#9ca3af;display:none;}\n"
 "  </style>\n"
 "  <script>\n"
+"    let MERMAID_SRC = `" + mermaid_text.replace("`","\\`") + "`;\n"
 "    const NODE_TO_PATH = " + (mapping_json) + ";\n"
-"    mermaid.initialize({startOnLoad:true, securityLevel:'loose'});\n"
-"    let vb0 = null;\n"
+"    const GRAPH_DATA = " + (graph_json) + ";\n"
+"    let vb0 = null; let lastId='';\n"
+"    function initMermaid(nodeSpacing, rankSpacing){ mermaid.initialize({startOnLoad:false, securityLevel:'loose', flowchart:{nodeSpacing:nodeSpacing, rankSpacing:rankSpacing, htmlLabels:true, useMaxWidth:false}});}\n"
 "    function getSvg(){ return document.querySelector('#view svg'); }\n"
-"    function ensureViewBox(svg){\n"
-"      if(!svg) return;\n"
-"      if(!svg.getAttribute('viewBox')){\n"
-"        const bb = svg.getBBox();\n"
-"        svg.setAttribute('viewBox', bb.x + ' ' + bb.y + ' ' + bb.width + ' ' + bb.height);\n"
-"      }\n"
-"      if(!vb0){ vb0 = (svg.getAttribute('viewBox')||'0 0 100 100').split(' ').map(Number); }\n"
-"    }\n"
-"    function setViewBox(svg, x,y,w,h){ svg.setAttribute('viewBox', x+' '+y+' '+w+' '+h); }\n"
-"    function currentVB(svg){ return (svg.getAttribute('viewBox')||'0 0 100 100').split(' ').map(Number); }\n"
-"    function zoomAt(svg, factor, cx, cy){\n"
-"      ensureViewBox(svg);\n"
-"      let vb = currentVB(svg); let x=vb[0], y=vb[1], w=vb[2], h=vb[3];\n"
-"      const mx = x + w * cx/svg.clientWidth;\n"
-"      const my = y + h * cy/svg.clientHeight;\n"
-"      const nw = w * factor; const nh = h * factor;\n"
-"      const nx = mx - (mx - x) * (nw/w);\n"
-"      const ny = my - (my - y) * (nh/h);\n"
-"      setViewBox(svg, nx, ny, nw, nh);\n"
-"    }\n"
-"    function zoomIn(){ const s=getSvg(); if(s) zoomAt(s, 0.8, s.clientWidth/2, s.clientHeight/2); }\n"
-"    function zoomOut(){ const s=getSvg(); if(s) zoomAt(s, 1.25, s.clientWidth/2, s.clientHeight/2); }\n"
-"    function fitToContent(){ const s=getSvg(); if(!s) return; const bb=s.getBBox(); setViewBox(s, bb.x-10, bb.y-10, bb.width+20, bb.height+20); }\n"
-"    function resetView(){ const s=getSvg(); if(!s||!vb0) return; setViewBox(s, vb0[0], vb0[1], vb0[2], vb0[3]); }\n"
-"    function attachHandlers(){\n"
-"      const svg = getSvg(); if(!svg) return; ensureViewBox(svg);\n"
-"      svg.addEventListener('click', (e)=>{\n"
-"        let g = e.target; while(g && g.tagName !== 'g') g = g.parentElement; if(!g) return;\n"
-"        const id = g.id || (g.querySelector('[id]') && g.querySelector('[id]').id) || '';\n"
-"        if(!id) return; const p = NODE_TO_PATH[id] || ''; const hint = document.getElementById('hint');\n"
-"        if(p){ document.getElementById('hintPath').textContent = p; document.getElementById('openLink').href = 'file:///' + p.replace(/\\\\/g,'/'); hint.style.display = 'block'; }\n"
-"        else { document.getElementById('hintPath').textContent = id; document.getElementById('openLink').removeAttribute('href'); hint.style.display = 'block'; }\n"
-"      });\n"
-"      svg.addEventListener('wheel', (e)=>{ e.preventDefault(); const k = e.deltaY < 0 ? 0.9 : 1.1; zoomAt(svg, k, e.offsetX, e.offsetY); }, {passive:false});\n"
-"      let dragging=false, px=0, py=0; svg.addEventListener('mousedown',(e)=>{ dragging=true; px=e.clientX; py=e.clientY; svg.style.cursor='grabbing'; });\n"
-"      window.addEventListener('mouseup',()=>{ dragging=false; if(svg) svg.style.cursor='grab'; });\n"
-"      window.addEventListener('mousemove',(e)=>{ if(!dragging) return; const vb=currentVB(svg); const x=vb[0], y=vb[1], w=vb[2], h=vb[3]; const dx = (e.clientX-px)*w/svg.clientWidth; const dy=(e.clientY-py)*h/svg.clientHeight; setViewBox(svg, x-dx, y-dy, w, h); px=e.clientX; py=e.clientY; });\n"
-"    }\n"
-"    function exportPng(){\n"
-"      const svg = getSvg(); if(!svg) return alert('SVG not ready');\n"
-"      const serializer = new XMLSerializer(); const svgStr = serializer.serializeToString(svg);\n"
-"      const blob = new Blob([svgStr], {type: 'image/svg+xml;charset=utf-8'});\n"
-"      const url = URL.createObjectURL(blob); const img = new Image();\n"
-"      img.onload = function(){ const canvas = document.createElement('canvas'); const bb = svg.getBBox();\n"
-"        canvas.width = Math.ceil(bb.width+40); canvas.height = Math.ceil(bb.height+40);\n"
-"        const ctx = canvas.getContext('2d'); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.drawImage(img, 20, 20);\n"
-"        const a = document.createElement('a'); a.download='code_map.png'; a.href=canvas.toDataURL('image/png'); a.click(); URL.revokeObjectURL(url); };\n"
-"      img.onerror = function(){ URL.revokeObjectURL(url); alert('Export failed'); };\n"
-"      img.src = url;\n"
-"    }\n"
-"    function copyPath(){ const t = document.getElementById('hintPath').textContent; if(!t) return; if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(t); } else { const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta);} }\n"
-"    document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(()=>{ attachHandlers(); }, 400); });\n"
+"    function ensureViewBox(svg){ if(!svg) return; if(!svg.getAttribute('viewBox')){ const bb = svg.getBBox(); svg.setAttribute('viewBox', bb.x+' '+bb.y+' '+bb.width+' '+bb.height);} if(!vb0){ vb0 = (svg.getAttribute('viewBox')||'0 0 100 100').split(' ').map(Number);} }\n"
+"    function setViewBox(svg, x,y,w,h){ svg.setAttribute('viewBox', x+' '+y+' '+w+' '+h);}\n"
+"    function currentVB(svg){ return (svg.getAttribute('viewBox')||'0 0 100 100').split(' ').map(Number);}\n"
+"    function zoomAt(svg,factor,cx,cy){ ensureViewBox(svg); let vb=currentVB(svg),x=vb[0],y=vb[1],w=vb[2],h=vb[3]; const mx=x+w*cx/svg.clientWidth, my=y+h*cy/svg.clientHeight; const nw=w*factor, nh=h*factor; const nx=mx-(mx-x)*(nw/w), ny=my-(my-y)*(nh/h); setViewBox(svg,nx,ny,nw,nh); updateMini();}\n"
+"    function zoomIn(){ const s=getSvg(); if(s) zoomAt(s,0.8,s.clientWidth/2,s.clientHeight/2);}\n"
+"    function zoomOut(){ const s=getSvg(); if(s) zoomAt(s,1.25,s.clientWidth/2,s.clientHeight/2);}\n"
+"    function fitToContent(){ const s=getSvg(); if(!s) return; const bb=s.getBBox(); setViewBox(s,bb.x-20,bb.y-20,bb.width+40,bb.height+40); updateMini();}\n"
+"    function resetView(){ const s=getSvg(); if(!s||!vb0) return; setViewBox(s,vb0[0],vb0[1],vb0[2],vb0[3]); updateMini();}\n"
+"    function toggleFull(){ if(!document.fullscreenElement){ document.documentElement.requestFullscreen(); } else { document.exitFullscreen(); } }\n"
+"    function idOf(node){ return node && node.id ? node.id : (node.querySelector('[id]')?node.querySelector('[id]').id:''); }\n"
+"    function nodes(){ return Array.from(document.querySelectorAll('#view svg g[class^=node]')); }\n"
+"    function edges(){ return Array.from(document.querySelectorAll('#view svg g[class^=edge]')); }\n"
+"    function setDim(active){ const ns=nodes(), es=edges(); ns.forEach(n=>n.style.opacity=0.15); es.forEach(e=>e.style.opacity=0.15); active.forEach(n=>n.style.opacity=1);}\n"
+"    function clearDim(){ nodes().forEach(n=>n.style.opacity=''); edges().forEach(e=>e.style.opacity=''); }\n"
+"    function applySearch(){ const q=(document.getElementById('searchBox').value||'').toLowerCase(); nodes().forEach(n=>n.classList.remove('match')); if(!q){ clearDim(); return;} const hits=[]; nodes().forEach(n=>{ const t=n.textContent.toLowerCase(); const i=idOf(n).toLowerCase(); if(t.includes(q)||i.includes(q)){ hits.push(n);} }); if(hits.length){ setDim(hits); hits.forEach(h=>h.classList.add('match')); } }\n"
+"    const BOOKMARKS = [];\n"
+"    const NODE_INDEX = {};\n"
+"    function buildIndex(){ Object.keys(NODE_INDEX).forEach(k=>delete NODE_INDEX[k]); nodes().forEach(n=>{ const i=idOf(n); if(i) NODE_INDEX[i]=n; }); }\n"
+"    function neighbors(ofId){ return edges().filter(e=>(((e.id||'')+' '+(e.textContent||''))).indexOf(ofId)>=0); }\n"
+"    function highlightNode(ofId){ const base = NODE_INDEX[ofId]; const es = neighbors(ofId); const rel = []; if(base) rel.push(base); es.forEach(e=>{ const s=((e.id||'')+' '+(e.textContent||'')); const toks = s.match(/[A-Za-z0-9_]+/g)||[]; toks.forEach(t=>{ if(t!==ofId && NODE_INDEX[t] && !rel.includes(NODE_INDEX[t])) rel.push(NODE_INDEX[t]); }); }); if(rel.length||es.length){ setDim(rel.concat(es)); rel.forEach(n=>{ if(n.classList) n.classList.add('match'); }); } }\n"
+"    function copyPath(){ try{ const t=(document.getElementById('hintPath').textContent||''); if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t); } }catch(e){} }\n"
+"    function buildGraph(){ const ids=nodes().map(n=>idOf(n)).filter(Boolean); const idSet=new Set(ids); const adj={}; ids.forEach(i=>adj[i]=new Set()); edges().forEach(e=>{ const s=((e.outerHTML||'')+' '+(e.textContent||'')+' '+(e.id||'')); const toks=(s.match(/[A-Za-z0-9_]+/g)||[]); const present=[]; const seen=new Set(); toks.forEach(t=>{ if(idSet.has(t) && !seen.has(t)){ present.push(t); seen.add(t);} }); for(let i=0;i<present.length;i++){ for(let j=i+1;j<present.length;j++){ adj[present[i]].add(present[j]); adj[present[j]].add(present[i]); } } }); return adj; }\n"
+"    function topNNodes(adj, n){ if(!n||n<=0) return null; const arr=Object.keys(adj).map(k=>({k, d:adj[k].size})); arr.sort((a,b)=>b.d-a.d); return new Set(arr.slice(0, Math.min(n, arr.length)).map(o=>o.k)); }\n"
+"    function depthFrom(adj, root, depth){ if(!root||!adj[root]||depth==null||depth<0) return null; const keep=new Set([root]); let frontier=[root]; for(let dist=0; dist<depth; dist++){ const next=[]; frontier.forEach(u=>{ adj[u].forEach(v=>{ if(!keep.has(v)){ keep.add(v); next.push(v);} }); }); if(!next.length) break; frontier=next; } return keep; }\n"
+"    function applyFilters(){ const svg=getSvg(); if(!svg) return; const depthVal=parseInt((document.getElementById('depthLimit')?document.getElementById('depthLimit').value:''),10); const topVal=parseInt((document.getElementById('topN')?document.getElementById('topN').value:''),10); if(!(depthVal>0 || topVal>0)){ clearFilter(); return; } const adj=buildGraph(); const A=topNNodes(adj, topVal); const B=depthFrom(adj, lastId, depthVal); let allowed=null; if(A&&B){ allowed=new Set([...A].filter(x=>B.has(x))); } else { allowed=A||B; } const ns=nodes(); const es=edges(); ns.forEach(n=>{ const id=idOf(n); const vis = allowed? allowed.has(id):true; n.style.display = vis?'':'none'; }); es.forEach(e=>{ const s=((e.outerHTML||'')+' '+(e.textContent||'')+' '+(e.id||'')); const keep = allowed? Array.from(allowed).some(x=> s.indexOf(x)>=0 ) : true; e.style.display = keep?'':'none'; }); updateMini(); }\n"
+"    function clearFilter(){ nodes().forEach(n=>n.style.display=''); edges().forEach(e=>e.style.display=''); toggleLayers(); updateMini(); }\n"
+"    function saveBookmark(){ const svg=getSvg(); if(!svg) return; const vb=currentVB(svg); const name=(document.getElementById('bmName')?document.getElementById('bmName').value.trim():'') || ('View '+(BOOKMARKS.length+1)); BOOKMARKS.push({name, vb}); const sel=document.getElementById('bmList'); if(sel){ const opt=document.createElement('option'); opt.value=String(BOOKMARKS.length-1); opt.textContent=name; sel.appendChild(opt); sel.value=opt.value; } }\n"
+"    function applyBookmark(){ const sel=document.getElementById('bmList'); const svg=getSvg(); if(!sel||!svg||sel.value==='') return; const idx=parseInt(sel.value,10); const bm=BOOKMARKS[idx]; if(!bm) return; setViewBox(svg,bm.vb[0],bm.vb[1],bm.vb[2],bm.vb[3]); updateMini(); }\n"
+"    function hasPrefix(id,p){ return id && id.indexOf(p)===0;}\n"
+"    function toggleLayers(){ const showFiles=document.getElementById('layerFiles').checked; const showFuncs=document.getElementById('layerFuncs').checked; const showClasses=document.getElementById('layerClasses').checked; const showDirs=document.getElementById('layerDirs').checked; const showMods=document.getElementById('layerMods').checked; const showImports=document.getElementById('layerImports')?document.getElementById('layerImports').checked:true; const showCalls=document.getElementById('layerCalls')?document.getElementById('layerCalls').checked:true; nodes().forEach(n=>{ const i=idOf(n); let vis=true; if(hasPrefix(i,'file_')&&!showFiles) vis=false; if(hasPrefix(i,'fn_')&&!showFuncs) vis=false; if(hasPrefix(i,'cls_')&&!showClasses) vis=false; if(hasPrefix(i,'dir_')&&!showDirs) vis=false; if(hasPrefix(i,'mod_')&&!showMods) vis=false; n.style.display = vis?'' : 'none'; }); edges().forEach(e=>{ const lbl=(e.textContent||'').toLowerCase(); let vis=true; if(lbl.includes('import')&&!showImports) vis=false; if(lbl.includes('call')&&!showCalls) vis=false; e.style.display=vis?'':'none'; }); }\n"
+"    function fitSelection(g){ const svg=getSvg(); if(!svg||!g) return; const bb=g.getBBox(); setViewBox(svg, bb.x-30, bb.y-30, bb.width+60, bb.height+60); updateMini();}\n"
+"    function exportPng(){ const svg=getSvg(); if(!svg) return alert('SVG not ready'); const serializer=new XMLSerializer(); const svgStr=serializer.serializeToString(svg); const blob=new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'}); const url=URL.createObjectURL(blob); const img=new Image(); img.onload=function(){ const canvas=document.createElement('canvas'); const bb=svg.getBBox(); canvas.width=Math.ceil(bb.width+40); canvas.height=Math.ceil(bb.height+40); const ctx=canvas.getContext('2d'); ctx.fillStyle='#111'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,20,20); const a=document.createElement('a'); a.download='code_map.png'; a.href=canvas.toDataURL('image/png'); a.click(); URL.revokeObjectURL(url); }; img.onerror=function(){ URL.revokeObjectURL(url); alert('Export failed'); }; img.src=url;}\n"
+"    function exportSvg(){ const svg=getSvg(); if(!svg) return alert('SVG not ready'); const serializer=new XMLSerializer(); const svgStr=serializer.serializeToString(svg); const blob=new Blob([svgStr], {type:'image/svg+xml;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.download='code_map.svg'; a.href=url; a.click(); setTimeout(()=>URL.revokeObjectURL(url), 500);}\n"
+"    function exportJson(){ const data = GRAPH_DATA && GRAPH_DATA.nodes ? GRAPH_DATA : {nodes: Array.from(document.querySelectorAll('#view svg g[class^=node]')).map(n=>idOf(n)), edges: Array.from(document.querySelectorAll('#view svg g[class^=edge]')).map(e=>e.textContent)}; const blob=new Blob([JSON.stringify(data,null,2)], {type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.download='code_map.json'; a.href=url; a.click(); setTimeout(()=>URL.revokeObjectURL(url), 500);}\n"
+"    function attachHandlers(){ const svg=getSvg(); if(!svg) return; ensureViewBox(svg); buildIndex(); svg.addEventListener('click',(e)=>{ let g=e.target; while(g && g.tagName!=='g') g=g.parentElement; if(!g) return; const id=idOf(g); if(!id) return; lastId=id; const p=NODE_TO_PATH[id]||''; const hint=document.getElementById('hint'); if(p){ document.getElementById('hintPath').textContent=p; document.getElementById('openLink').href='file:///' + p.replace(/\\\\/g,'/'); } else { document.getElementById('hintPath').textContent=id; document.getElementById('openLink').removeAttribute('href'); } hint.style.display='block'; fitSelection(g); }); svg.addEventListener('wheel',(e)=>{ e.preventDefault(); const k=e.deltaY<0?0.9:1.1; zoomAt(svg,k,e.offsetX,e.offsetY); },{passive:false}); let dragging=false,px=0,py=0; svg.addEventListener('mousedown',(e)=>{ dragging=true; px=e.clientX; py=e.clientY; svg.style.cursor='grabbing'; }); window.addEventListener('mouseup',()=>{ dragging=false; if(svg) svg.style.cursor='grab'; }); window.addEventListener('mousemove',(e)=>{ if(!dragging) return; const vb=currentVB(svg),x=vb[0],y=vb[1],w=vb[2],h=vb[3]; const dx=(e.clientX-px)*w/svg.clientWidth; const dy=(e.clientY-py)*h/svg.clientHeight; setViewBox(svg,x-dx,y-dy,w,h); px=e.clientX; py=e.clientY; updateMini(); }); svg.addEventListener('mouseover',(e)=>{ let g=e.target; while(g && g.tagName!=='g') g=g.parentElement; if(!g) return; const id=idOf(g); if(!id) return; highlightNode(id); }); svg.addEventListener('mouseout',()=>{ clearDim(); }); const sb=document.getElementById('searchBox'); if(sb) sb.addEventListener('input', applySearch); ['layerFiles','layerFuncs','layerClasses','layerDirs','layerMods','layerImports','layerCalls'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('change', toggleLayers); }); toggleLayers(); }\n"
+"    let progActive=false, progReq=null, chunkSize=80, revealIndex=0;\n"
+"    function startProgressive(){ const svg=getSvg(); if(!svg) return; progActive=true; revealIndex=0; document.getElementById('prog').style.display='block'; document.getElementById('progPct').style.display='block'; nodes().forEach(n=>n.style.display='none'); edges().forEach(e=>e.style.display='none'); const total = nodes().length + edges().length; const step = ()=>{ if(!progActive){ cancelAnimationFrame(progReq); return;} let shown=0; const ns=nodes(); const es=edges(); while(shown<chunkSize && revealIndex<ns.length){ ns[revealIndex++].style.display=''; shown++; } let ei=0; while(shown<chunkSize && ei<es.length){ const e = es[ei++]; if(e.style.display==='none'){ e.style.display=''; shown++; } } const doneCount = Math.min(revealIndex, ns.length) + Array.from(es).filter(e=>e.style.display!=='none').length; const pct = Math.min(100, Math.round(100*doneCount/Math.max(1,total))); document.getElementById('progBar').style.width=pct+'%'; document.getElementById('progPct').textContent=pct+'%'; if(doneCount>=total){ stopProgressive(); fitToContent(); } else { progReq=requestAnimationFrame(step);} }; progReq=requestAnimationFrame(step);}\n"
+"    function stopProgressive(){ progActive=false; document.getElementById('prog').style.display='none'; document.getElementById('progPct').style.display='none';}\n"
+"    function setChunkSize(val){ const v=parseInt(val||80,10); if(!isNaN(v)&&v>0) chunkSize=v; }\n"
+"    function trimLabels(src){ try{ return src.replace(/\[(.+?)\]/g,(m,p)=>{ if(p.length<=28) return m; return '['+p.slice(0,12)+'…'+p.slice(-12)+']'; }); }catch(e){ return src;} }\n"
+"    function prepareSrc(orient){ let s = MERMAID_SRC.replace(/graph\\s+(TD|LR|BT|RL)/,'graph '+orient); s = trimLabels(s); return s; }\n"
+"    function rerender(){ const orient=document.getElementById('orient').value; const ns=parseInt(document.getElementById('nodeSp').value||35); const rs=parseInt(document.getElementById('rankSp').value||120); initMermaid(ns,rs); let src = prepareSrc(orient); const host=document.getElementById('mermaidHost'); host.textContent = src; try{ mermaid.run({ querySelector: '#mermaidHost' }); }catch(e){} setTimeout(()=>{ vb0=null; attachHandlers(); fitToContent(); const many = nodes().length + edges().length > 600; if(many){ startProgressive(); } }, 200);}\n"
+"    function updateMini(){ try{ const svg=getSvg(); if(!svg) return; const bb=svg.getBBox(); const vb=currentVB(svg); const c=document.getElementById('mini'); const ctx=c.getContext('2d'); const serializer=new XMLSerializer(); const svgStr=serializer.serializeToString(svg); const img=new Image(); const url=URL.createObjectURL(new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'})); img.onload=function(){ ctx.clearRect(0,0,c.width,c.height); const r=Math.min(c.width/bb.width, c.height/bb.height); const ox=(c.width-bb.width*r)/2, oy=(c.height-bb.height*r)/2; ctx.drawImage(img, ox-bb.x*r, oy-bb.y*r, bb.width*r, bb.height*r); const rx = (vb[0]-bb.x)*r+ox, ry=(vb[1]-bb.y)*r+oy, rw=vb[2]*r, rh=vb[3]*r; ctx.strokeStyle='#38bdf8'; ctx.lineWidth=2; ctx.strokeRect(rx,ry,rw,rh); URL.revokeObjectURL(url); }; img.src=url; }catch(e){} }\n"
+"    function showCtx(x,y){ const m=document.getElementById('ctx'); m.style.display='block'; m.style.left=x+'px'; m.style.top=y+'px'; }\n"
+"    function hideCtx(){ document.getElementById('ctx').style.display='none'; }\n"
+"    function ctxCopy(){ copyPath(); hideCtx(); }\n"
+"    function ctxOpen(){ const a=document.getElementById('openLink'); if(a && a.href) a.click(); hideCtx(); }\n"
+"    function ctxFit(){ const svg=getSvg(); const ns=nodes(); const n=ns.find(n=>idOf(n)===lastId); if(n) fitSelection(n); hideCtx(); }\n"
+"    document.addEventListener('DOMContentLoaded', ()=>{ initMermaid(35,120); setTimeout(()=>{ const host=document.getElementById('mermaidHost'); host.textContent = prepareSrc(document.getElementById('orient').value||'LR'); try{ mermaid.run({ querySelector: '#mermaidHost' }); }catch(e){} attachHandlers(); fitToContent(); updateMini(); }, 300); document.addEventListener('contextmenu',(e)=>{ let g=e.target; while(g && g.tagName!=='g') g=g.parentElement; if(g && g.parentElement && g.closest('#view')){ e.preventDefault(); lastId = idOf(g); showCtx(e.clientX, e.clientY);} else { hideCtx(); } }); document.addEventListener('click',()=>hideCtx()); });\n"
 "  </script>\n"
 "  </head>\n"
 "<body>\n"
 "<div class='toolbar'>\n"
-"  <button onclick='zoomIn()'>Zoom In</button>\n"
-"  <button onclick='zoomOut()'>Zoom Out</button>\n"
-"  <button onclick='fitToContent()'>Fit</button>\n"
-"  <button onclick='resetView()'>Reset</button>\n"
-"  <button onclick='exportPng()'>Export PNG</button>\n"
-"</div>\n"
-"<div id='view'>\n"
-"  <div class='mermaid'>\n" + mermaid_text + "\n"
+"  <div class='tools-left'>\n"
+"    <input id='searchBox' type='text' placeholder='Search nodes...' />\n"
+"    <label><input type='checkbox' id='layerImports' checked /> Imports</label>\n"
+"    <label><input type='checkbox' id='layerCalls' checked /> Calls</label>\n"
+"    <label><input type='checkbox' id='layerMods' checked /> Modules</label>\n"
+"    <label><input type='checkbox' id='layerDirs' checked /> Dirs</label>\n"
+"    <label><input type='checkbox' id='layerFiles' checked /> Files</label>\n"
+"    <label><input type='checkbox' id='layerClasses' checked /> Classes</label>\n"
+"    <label><input type='checkbox' id='layerFuncs' checked /> Functions</label>\n"
+"  </div>\n"
+"  <div class='tools-right'>\n"
+"    <label>Orientation <select id='orient'><option>LR</option><option>TD</option><option>BT</option><option>RL</option></select></label>\n"
+"    <label>Node <input id='nodeSp' type='range' min='10' max='120' value='35' /></label>\n"
+"    <label>Rank <input id='rankSp' type='range' min='40' max='300' value='120' /></label>\n"
+"    <input id='bmName' type='text' placeholder='Bookmark name' style='width:130px'/>\n"
+"    <select id='bmList'><option value=''>Bookmarks</option></select>\n"
+"    <button onclick='saveBookmark()'>Save View</button>\n"
+"    <button onclick='applyBookmark()'>Apply</button>\n"
+"    <label>Depth <input id='depthLimit' type='number' min='1' max='999' style='width:64px' /></label>\n"
+"    <label>Top-N <input id='topN' type='number' min='1' max='999' style='width:64px' /></label>\n"
+"    <button onclick='applyFilters()'>Apply Filter</button>\n"
+"    <button onclick='clearFilter()'>Clear</button>\n"
+"    <label>Chunk <input id='chunkSize' type='number' min='20' max='500' value='80' style='width:64px' oninput='setChunkSize(this.value)'/></label>\n"
+"    <button onclick='startProgressive()'>Start Progressive</button>\n"
+"    <button onclick='stopProgressive()'>Stop</button>\n"
+"    <button onclick='rerender()'>Apply Layout</button>\n"
+"    <button onclick='zoomIn()'>Zoom In</button>\n"
+"    <button onclick='zoomOut()'>Zoom Out</button>\n"
+"    <button onclick='fitToContent()'>Fit</button>\n"
+"    <button onclick='resetView()'>Reset</button>\n"
+"    <button onclick='exportPng()'>PNG</button>\n"
+"    <button onclick='exportSvg()'>SVG</button>\n"
+"    <button onclick='exportJson()'>JSON</button>\n"
+"    <button onclick='toggleFull()'>Fullscreen</button>\n"
 "  </div>\n"
 "</div>\n"
+"<div id='view'>\n"
+"  <div class='mermaid' id='mermaidHost'></div>\n"
+"</div>\n"
+"<canvas id='mini' width='220' height='160'></canvas>\n"
+"<div id='prog'><div id='progBar'></div></div>\n"
+"<div id='progPct'>0%</div>\n"
 "<div class='hint' id='hint'>\n"
 "  <strong>Node</strong>\n"
 "  <div id='hintPath' style='word-wrap:anywhere'></div>\n"
@@ -1270,6 +1598,11 @@ class MainWindow(BaseTk):
 "    <button onclick='copyPath()'>Copy Path</button>\n"
 "    <a id='openLink' href='#' target='_blank'><button>Open</button></a>\n"
 "  </div>\n"
+"</div>\n"
+"<div id='ctx'>\n"
+"  <button onclick='ctxCopy()'>Copy Path</button>\n"
+"  <button onclick='ctxOpen()'>Open</button>\n"
+"  <button onclick='ctxFit()'>Fit to selection</button>\n"
 "</div>\n"
 "</body>\n"
 "</html>")
@@ -1303,8 +1636,22 @@ class MainWindow(BaseTk):
                 files = [p for p in files if os.path.exists(p)]
                 def _sid(s: str) -> str:
                     return re.sub(r'[^a-zA-Z0-9_]', '_', s)
+                def _label(name: str) -> str:
+                    try:
+                        return name if len(name) <= 28 else (name[:12] + '…' + name[-12:])
+                    except Exception:
+                        return name
+                # orientation and spacing
+                try:
+                    orient = (self.engine.get_setting('map.orientation', 'LR') or 'LR').upper()
+                    node_sp = int(self.engine.get_setting('map.node_spacing', 35) or 35)
+                    rank_sp = int(self.engine.get_setting('map.rank_spacing', 120) or 120)
+                except Exception:
+                    orient, node_sp, rank_sp = 'LR', 35, 120
                 lines = [
-                    'graph TD',
+                    f"%%{{init: {{ 'flowchart': {{ 'nodeSpacing': {node_sp}, 'rankSpacing': {rank_sp}, 'htmlLabels': true }} }} }}%%",
+                    f'graph {orient}',
+                    'classDef group fill:#0b2534,stroke:#0ea5e9,stroke-width:1px;',
                     'classDef module fill:#e3f2fd,stroke:#1e88e5,stroke-width:1px;',
                     'classDef file fill:#eef7ff,stroke:#64b5f6,stroke-width:1px;'
                 ]
@@ -1320,11 +1667,11 @@ class MainWindow(BaseTk):
                         dir_id = _sid(f'dir_{top}')
                         dir_ids[top] = dir_id
                         node_to_path[dir_id] = os.path.join(proj, top) if proj else os.path.dirname(p)
-                        lines.append(f'{dir_id}[{top}]')
-                        lines.append(f'class {dir_id} module')
+                        lines.append(f'{dir_id}[{_label(top)}]')
+                        lines.append(f'class {dir_id} group')
                     file_id = _sid(f'file_{rel.replace(os.sep,"_")}')
                     node_to_path[file_id] = p
-                    lines.append(f'{file_id}[{os.path.basename(p)}]')
+                    lines.append(f'{file_id}[{_label(os.path.basename(p))}]')
                     lines.append(f'{dir_id} --> {file_id}')
                 # JS imports edges (best-effort)
                 for p in [f for f in files if f.lower().endswith(('.js','.ts','.jsx','.tsx'))][:800]:
@@ -1344,8 +1691,8 @@ class MainWindow(BaseTk):
                                 tgt_id = _sid(f'mod_{m.split('/')[-1]}')
                             if tgt_id not in node_to_path:
                                 node_to_path[tgt_id] = tgt if 'tgt' in locals() and os.path.exists(tgt) else ''
-                                lines.append(f'{tgt_id}[{m}]')
-                            lines.append(f'{src_id} -.-> {tgt_id}')
+                                lines.append(f'{tgt_id}[{_label(m)}]')
+                            lines.append(f'{src_id} -.->|import| {tgt_id}')
                         for m in re.findall(r"require\(\s*['\"](.+?)['\"]\s*\)", txt):
                             if m.startswith('.'):
                                 tgt = os.path.normpath(os.path.join(os.path.dirname(p), m))
@@ -1358,8 +1705,8 @@ class MainWindow(BaseTk):
                                 tgt_id = _sid(f'mod_{m.split('/')[-1]}')
                             if tgt_id not in node_to_path:
                                 node_to_path[tgt_id] = tgt if 'tgt' in locals() and os.path.exists(tgt) else ''
-                                lines.append(f'{tgt_id}[{m}]')
-                            lines.append(f'{src_id} -.-> {tgt_id}')
+                                lines.append(f'{tgt_id}[{_label(m)}]')
+                            lines.append(f'{src_id} -.->|import| {tgt_id}')
                     except Exception:
                         continue
                 if len(lines) <= 3:
@@ -1381,18 +1728,46 @@ class MainWindow(BaseTk):
             '  module: blue\n  class: purple\n  function: green\n  hot: red overlay\n\n'
             'Edges:\n  solid: contains\n  dotted: import\n  solid module→fn: local call\n'
         )
+        try:
+            orient = (self.engine.get_setting('map.orientation', 'LR') or 'LR').upper()
+            node_sp = int(self.engine.get_setting('map.node_spacing', 35) or 35)
+            rank_sp = int(self.engine.get_setting('map.rank_spacing', 120) or 120)
+        except Exception:
+            orient, node_sp, rank_sp = 'LR', 35, 120
         lines = [
-            'graph TD',
-            'classDef module fill:#e3f2fd,stroke:#1e88e5,stroke-width:1px;',
-            'classDef class fill:#ede7f6,stroke:#6a1b9a,stroke-width:1px;',
-            'classDef func fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px;',
-            'classDef hot fill:#ffebee,stroke:#c62828,stroke-width:1px;'
+            f"%%{{init: {{ 'flowchart': {{ 'nodeSpacing': {node_sp}, 'rankSpacing': {rank_sp}, 'htmlLabels': true }} }} }}%%",
+            f'graph {orient}',
+            'classDef group fill:#0b2534,stroke:#0ea5e9,stroke-width:1px;',
+            'classDef module fill:#e3f2fd,stroke:#1e88e5,stroke-width:1.2px;',
+            'classDef class fill:#ede7f6,stroke:#6a1b9a,stroke-width:1.2px;',
+            'classDef func fill:#e8f5e9,stroke:#2e7d32,stroke-width:0.8px;',
+            'classDef hot1 fill:#ffe5e5,stroke:#ef5350,stroke-width:1.4px;',
+            'classDef hot2 fill:#ffd6d6,stroke:#e53935,stroke-width:1.8px;',
+            'classDef hot3 fill:#ffcdd2,stroke:#b71c1c,stroke-width:2.4px;'
         ]
         node_to_path = {}
+        pkg_nodes = {}
         # Modules and members
         for mod, meta in symbols.items():
             mod_id = _sid(f'mod_{mod}')
             node_to_path[mod_id] = meta.get('path','')
+            # group by top directory/package
+            top = ''
+            try:
+                pth = meta.get('path','')
+                if pth:
+                    rel = os.path.relpath(pth, self.engine.state.project_path) if self.engine.state.project_path else pth
+                    top = (rel.split(os.sep)[0] or '').replace('.', '_')
+            except Exception:
+                top = ''
+            if top:
+                pkg_id = _sid(f'dir_{top}')
+                if pkg_id not in pkg_nodes:
+                    pkg_nodes[pkg_id] = top
+                    node_to_path[pkg_id] = os.path.join(self.engine.state.project_path or '', top)
+                    lines.append(f'{pkg_id}[{top}]')
+                    lines.append(f'class {pkg_id} group')
+                lines.append(f'{pkg_id} -->|contains| {mod_id}')
             lines.append(f'{mod_id}[{mod}]')
             lines.append(f'class {mod_id} module')
             # apply hot overlay if module exceeds threshold
@@ -1408,7 +1783,16 @@ class MainWindow(BaseTk):
             except Exception:
                 score = 0.0
             if base in hot and score >= min_hot:
-                lines.append(f'class {mod_id} hot')
+                # intensity tiers
+                tier = 'hot1'
+                try:
+                    if score >= 0.66:
+                        tier = 'hot3'
+                    elif score >= 0.33:
+                        tier = 'hot2'
+                except Exception:
+                    tier = 'hot1'
+                lines.append(f'class {mod_id} {tier}')
             if include_classes:
                 for cls in meta.get('classes', []):
                     cls_id = _sid(f'cls_{mod}_{cls}')
@@ -1426,7 +1810,7 @@ class MainWindow(BaseTk):
         # Import edges
         if include_imports:
             for a,b in import_edges[:2000]:
-                lines.append(f'{_sid("mod_"+a)} -.-> {_sid("mod_"+b)}')
+                lines.append(f'{_sid("mod_"+a)} -.->|import| {_sid("mod_"+b)}')
         # Local function calls (quick pass)
         try:
             import ast
@@ -1446,7 +1830,7 @@ class MainWindow(BaseTk):
                             elif isinstance(node.func, ast.Attribute):
                                 fn = node.func.attr
                             if fn and fn in funcs:
-                                lines.append(f'{_sid("mod_"+mod)} --> {_sid("fn_"+mod+"_"+fn)}')
+                                lines.append(f'{_sid("mod_"+mod)} -->|call| {_sid("fn_"+mod+"_"+fn)}')
                 except Exception:
                     continue
         except Exception:
@@ -1839,6 +2223,10 @@ class MainWindow(BaseTk):
         ttk.Label(tab_llm, text='Max tokens:').pack(anchor=tk.W)
         max_var = tk.StringVar(value=str(self.engine.get_setting('llm.max_tokens', 2000)))
         ttk.Entry(tab_llm, textvariable=max_var, width=10).pack(anchor=tk.W, pady=(0,6))
+        # AI Map input mode
+        ttk.Label(tab_llm, text='AI Map input:').pack(anchor=tk.W)
+        ai_map_mode_var = tk.StringVar(value=str(self.engine.get_setting('llm.ai_map_mode', 'minimal')).lower())
+        ttk.Combobox(tab_llm, textvariable=ai_map_mode_var, values=['minimal','extended'], state='readonly', width=12).pack(anchor=tk.W, pady=(0,6))
         safe_var = tk.BooleanVar(value=bool(self.engine.get_setting('llm.safe_mode', True)))
         ttk.Checkbutton(tab_llm, text='Do not send source code (metadata only)', variable=safe_var).pack(anchor=tk.W, pady=(0,6))
         # Footer buttons
@@ -1855,6 +2243,7 @@ class MainWindow(BaseTk):
             self.engine.config_manager.set_session_override('llm.provider', prov_var.get())
             self.engine.config_manager.set_session_override('llm.api_key', key_var.get())
             self.engine.config_manager.set_session_override('llm.model', model_var.get())
+            self.engine.config_manager.set_session_override('llm.ai_map_mode', ai_map_mode_var.get())
             try:
                 self.engine.config_manager.set_session_override('llm.temperature', float(temp_var.get()))
                 self.engine.config_manager.set_session_override('llm.max_tokens', int(max_var.get()))
@@ -2080,6 +2469,10 @@ class MainWindow(BaseTk):
         theme.create_styled_button(btns, 'Reset layout', command=self.reset_layout).pack(side=tk.RIGHT, padx=(0,8))
 
     def _open_logs_viewer(self):
+        try:
+            self.log.info('UI: open_logs_viewer')
+        except Exception:
+            pass
         top = tk.Toplevel(self)
         top.title('Application Logs')
         top.geometry(f"800x500+{self.winfo_rootx()+60}+{self.winfo_rooty()+100}")
@@ -2157,10 +2550,20 @@ class MainWindow(BaseTk):
         """Handle format selection changes."""
         # Normalize to lowercase extensions
         norm = {f.lower() for f in formats if f}
+        try:
+            prev_inc = len(self.engine.state.include_files)
+            prev_oth = len(self.engine.state.other_files)
+            self.log.info(f'UI: formats_changed -> {sorted(list(norm))[:12]}...')
+        except Exception:
+            pass
         self.engine.set_active_formats(norm)
         # Mirror back to selector to keep Active list in sync (if external changes)
         try:
             self.format_selector.set_formats(sorted(list(norm)))
+        except Exception:
+            pass
+        try:
+            self.log.info(f'UI: reclassify done | include={len(self.engine.state.include_files)} (was {prev_inc}) | other={len(self.engine.state.other_files)} (was {prev_oth})')
         except Exception:
             pass
     

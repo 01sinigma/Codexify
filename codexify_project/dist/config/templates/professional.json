@@ -1,9 +1,0 @@
-{
-  "name": "Professional",
-  "description": "Clean, professional output format",
-  "include_header": true,
-  "include_toc": true,
-  "include_metadata": true,
-  "code_style": "github",
-  "section_headers": true
-}

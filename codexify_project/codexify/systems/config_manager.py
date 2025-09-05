@@ -435,30 +435,8 @@ class ConfigManager:
     
     # Theme Management
     
-    def _load_themes(self) -> Dict[str, Dict[str, Any]]:
-        """Loads available themes."""
-        themes = {}
-        
-        if self.themes_dir.exists():
-            for theme_file in self.themes_dir.glob("*.json"):
-                try:
-                    with open(theme_file, 'r', encoding='utf-8') as f:
-                        theme_data = json.load(f)
-                        theme_name = theme_file.stem
-                        themes[theme_name] = theme_data
-                except Exception as e:
-                    print(f"ConfigManager: Error loading theme {theme_file}: {e}")
-        
-        # Add default theme if none exists
-        if not themes:
-            self._create_default_theme()
-            themes = self._load_themes()
-        
-        return themes
-    
-    def _create_default_theme(self):
-        """Creates a default theme."""
-        default_theme = {
+    def _default_theme_data(self) -> Dict[str, Any]:
+        return {
             "name": "Default",
             "description": "Default Codexify theme",
             "colors": {
@@ -484,9 +462,50 @@ class ConfigManager:
                 "border_radius": 4
             }
         }
+
+    def _load_themes(self) -> Dict[str, Dict[str, Any]]:
+        """Loads available themes."""
+        themes = {}
         
+        if self.themes_dir.exists():
+            for theme_file in self.themes_dir.glob("*.json"):
+                try:
+                    with open(theme_file, 'r', encoding='utf-8') as f:
+                        theme_data = json.load(f)
+                        theme_name = theme_file.stem
+                        themes[theme_name] = theme_data
+                except Exception as e:
+                    print(f"ConfigManager: Error loading theme {theme_file}: {e}")
+        
+        # Add default theme if none exists
+        if not themes:
+            if self.volatile_mode:
+                themes = {"default": self._default_theme_data()}
+            else:
+                self._create_default_theme()
+                # After creating on disk, try to load again once
+                if self.themes_dir.exists():
+                    for theme_file in self.themes_dir.glob("*.json"):
+                        try:
+                            with open(theme_file, 'r', encoding='utf-8') as f:
+                                theme_data = json.load(f)
+                                theme_name = theme_file.stem
+                                themes[theme_name] = theme_data
+                        except Exception as e:
+                            print(f"ConfigManager: Error loading theme {theme_file}: {e}")
+        
+        return themes
+    
+    def _create_default_theme(self):
+        """Creates a default theme."""
+        if self.volatile_mode:
+            # Store in-memory only
+            self.themes = {"default": self._default_theme_data()}
+            return
+        default_theme = self._default_theme_data()
         theme_file = self.themes_dir / "default.json"
         try:
+            self.themes_dir.mkdir(parents=True, exist_ok=True)
             with open(theme_file, 'w', encoding='utf-8') as f:
                 json.dump(default_theme, f, indent=2, ensure_ascii=False)
         except Exception as e:
@@ -518,30 +537,8 @@ class ConfigManager:
     
     # Template Management
     
-    def _load_templates(self) -> Dict[str, Dict[str, Any]]:
-        """Loads available output templates."""
-        templates = {}
-        
-        if self.templates_dir.exists():
-            for template_file in self.templates_dir.glob("*.json"):
-                try:
-                    with open(template_file, 'r', encoding='utf-8') as f:
-                        template_data = json.load(f)
-                        template_name = template_file.stem
-                        templates[template_name] = template_data
-                except Exception as e:
-                    print(f"ConfigManager: Error loading template {template_file}: {e}")
-        
-        # Add default templates if none exist
-        if not templates:
-            self._create_default_templates()
-            templates = self._load_templates()
-        
-        return templates
-    
-    def _create_default_templates(self):
-        """Creates default output templates."""
-        default_templates = {
+    def _default_templates_data(self) -> Dict[str, Dict[str, Any]]:
+        return {
             "professional": {
                 "name": "Professional",
                 "description": "Clean, professional output format",
@@ -571,10 +568,50 @@ class ConfigManager:
                 "include_examples": True
             }
         }
+
+    def _load_templates(self) -> Dict[str, Dict[str, Any]]:
+        """Loads available output templates."""
+        templates = {}
         
+        if self.templates_dir.exists():
+            for template_file in self.templates_dir.glob("*.json"):
+                try:
+                    with open(template_file, 'r', encoding='utf-8') as f:
+                        template_data = json.load(f)
+                        template_name = template_file.stem
+                        templates[template_name] = template_data
+                except Exception as e:
+                    print(f"ConfigManager: Error loading template {template_file}: {e}")
+        
+        # Add default templates if none exist
+        if not templates:
+            if self.volatile_mode:
+                templates = self._default_templates_data()
+            else:
+                self._create_default_templates()
+                # reload once
+                if self.templates_dir.exists():
+                    for template_file in self.templates_dir.glob("*.json"):
+                        try:
+                            with open(template_file, 'r', encoding='utf-8') as f:
+                                template_data = json.load(f)
+                                template_name = template_file.stem
+                                templates[template_name] = template_data
+                        except Exception as e:
+                            print(f"ConfigManager: Error loading template {template_file}: {e}")
+        
+        return templates
+    
+    def _create_default_templates(self):
+        """Creates default output templates."""
+        if self.volatile_mode:
+            self.templates = self._default_templates_data()
+            return
+        default_templates = self._default_templates_data()
         for name, template_data in default_templates.items():
             template_file = self.templates_dir / f"{name}.json"
             try:
+                self.templates_dir.mkdir(parents=True, exist_ok=True)
                 with open(template_file, 'w', encoding='utf-8') as f:
                     json.dump(template_data, f, indent=2, ensure_ascii=False)
             except Exception as e:

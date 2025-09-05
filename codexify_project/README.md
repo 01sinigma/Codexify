@@ -283,6 +283,21 @@ This design ensures that business logic is centralized and reusable, making the 
 - Volatile Mode: конфиг/пресеты/воркспейсы/хоткеи хранятся in‑memory; экспорт/импорт — по желанию пользователя.
 - Tests: smoke‑тест анализа и карты, LLM‑моки, тесты индекса символов и импорт‑графа.
 
+### Map: Advanced features (v0.5.x)
+- Bookmarks: сохранение и применение ракурсов (камера/viewBox) прямо в HTML‑просмотрщике.
+- Depth/Top‑N: ограничения по глубине от выделенного узла и по топ‑степени (центральности) для больших графов.
+- Hover highlight: подсветка соседей при наведении, остальное приглушается.
+- Collapse/expand уровней: быстрые чекбоксы слоёв (Dirs/Modules/Files/Classes/Functions, Imports/Calls).
+- Minimap: мини‑обзор с прямоугольником текущего viewport; Fit to selection.
+- Progressive loading: пошаговая отрисовка узлов/рёбер чанками (Chunk, Start/Stop) с прогресс‑баром; автостарт на больших графах.
+- Context menu: Copy Path, Open (в системе), Fit to selection.
+- Layout presets: Orientation (LR/TD/BT/RL), Node/Rank spacing с кнопкой Apply Layout.
+
+### AI (к карте)
+- AI Code Map: генерация обзорной карты по метаданным (пути, расширения, импорт‑пары) через LLM (OpenAI/Gemini).
+- AI Explain Node: краткое описание роли выбранного узла, рисков и идей рефакторинга.
+- AI Cluster Map: кластеризация подсистем — subgraph’ы и классы с цветами; открытие в HTML‑просмотрщике.
+
 ### LLM & AI (OpenAI/Gemini)
 - LLM Settings (вкладка): выбор провайдера (`openai`/`gemini`/`custom`), модель, температура, max tokens, safe mode.
 - Ключи API: поле `API Key (kept in-memory)` с кнопкой Paste (вставить из буфера), чекбоксом Show key (показать символы), кнопками `Save API` (сохранить в конфиг по запросу) и `Test API` (быстрый вызов `ping`).
@@ -290,6 +305,14 @@ This design ensures that business logic is centralized and reusable, making the 
 - Переменные окружения: если поле ключа пустое — читаем `OPENAI_API_KEY` (OpenAI) или `GEMINI_API_KEY` (Gemini).
 - Логи LLM: успехи/ошибки, провайдер, модель, длина запроса — доступны в Logs Viewer.
 - Gemini Thinking: поддержка опционального бюджета размышлений через `llm.gemini_thinking_budget` (0 — отключить).
+
+#### AI Code Map: режимы и валидация
+- **AI Map input (Settings → LLM)**:
+  - **minimal**: отправляются только безопасные метаданные (относительные пути, гистограмма расширений, пары импортов для Python). Исходный код не отправляется.
+  - **extended**: дополнительно передаётся лёгкая карта символов из анализа (modules/classes/functions) с усечением до безопасных лимитов.
+- **Chunking/лимиты**: большие промпты автоматически укорачиваются (усечение списков), чтобы укладываться в контекст модели.
+- **Валидация Mermaid**: ответ от LLM автоматически нормализуется (снятие markdown‑ограждений, нормализация стрелок, баланс `subgraph/end`). При невалидном синтаксисе выполняется одна попытка автопочинки/повторной генерации.
+- **Логирование**: в логи пишется режим, размеры промпта/ответа, результат валидации и факт повторной попытки.
 
 ### UI Logging
 - Добавлены логи на каждую ключевую кнопку/операцию GUI: выбор проекта, анализ, поиск дублей, открытие/сохранение настроек LLM, тест API, генерация карт и др. Все доступны через кнопку `Logs` внизу окна.
@@ -325,8 +348,14 @@ This design ensures that business logic is centralized and reusable, making the 
 1. Сгенерируйте карту: `Generate Full Code Map (Mermaid)`.
 2. В модальном окне нажмите `Open HTML` для интерактивного просмотра.
 3. Управление: Zoom In/Out, Fit, Reset; колесо — масштаб, зажатая ЛКМ — панорамирование.
-4. `Export PNG` сохраняет картинку в высоком качестве.
-5. Клик по узлу открывает хинт с полным путём и кнопкой `Open`.
+4. Layers: чекбоксы Imports/Calls и слоёв (Dirs/Modules/Files/Classes/Functions).
+5. Search: подсветка совпадений и приглушение прочих узлов.
+6. Bookmarks: в панели инструментов — имя, Save View/Apply.
+7. Depth/Top‑N: задайте значения и нажмите Apply Filter; Clear — сброс.
+8. Progressive: при больших графах загрузка стартует автоматически; вручную — Chunk/Start/Stop.
+9. `Export PNG/SVG/JSON` сохраняет соответствующие форматы.
+10. Клик по узлу открывает подсказку пути и кнопки `Copy/Open`.
+11. Контекст‑меню по узлу: Copy Path, Open, Fit selection.
 
 ---
 
@@ -336,6 +365,9 @@ This design ensures that business logic is centralized and reusable, making the 
 - Улучшено: HTML‑карта — пан/зум, экспорт PNG, подсказки, безопасные ID.
 - Добавлено: fallback для JS/TS импортов и карта файлов.
 - Улучшено: LLM Settings — Paste/Show key, Save API, Test API; динамические модели; поддержка env‑переменных.
+- Новое: Bookmarks, Depth/Top‑N фильтры, Hover highlight, Collapse/expand уровней.
+- Новое: Minimap и Fit to selection, Progressive loading с прогресс‑баром и Chunk‑контролем.
+- Новое: AI Code Map, AI Explain Node, AI Cluster Map (Mermaid).
 
 ### Portable Build (Windows)
 ```powershell
