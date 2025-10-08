@@ -223,6 +223,9 @@ class CodexifyEngine:
         if not files:
             return
         self.log.debug("remove_files | count=%d", len(files))
+        from_include = set(files) & set(self.state.include_files)
+        from_other = set(files) & set(self.state.other_files)
+
         self.state.include_files -= files
         self.state.other_files -= files
         self.state.ignored_files.update(files)
@@ -233,8 +236,8 @@ class CodexifyEngine:
         self._undo_stack.append({
             'type': 'remove',
             'files': set(files),
-            'from_include': set(files) & self.state.include_files,
-            'from_other': set(files) & self.state.other_files,
+            'from_include': from_include,
+            'from_other': from_other,
         })
         self._redo_stack.clear()
         self.events.post(FILES_UPDATED)
@@ -460,7 +463,7 @@ class CodexifyEngine:
         Internal method to classify all_discovered_files into
         include_files, other_files, and ignored_files based on active_formats.
         """
-        if not self.state.all_discovered_files:
+        if not (self.state.all_discovered_files or self.state.include_files or self.state.other_files):
             return
         
         self.log.debug("classify | discovered=%d", len(self.state.all_discovered_files))
