@@ -86,10 +86,15 @@ class CodexifyEngine:
         self.log.info("config applied | max_file_size=%s skip_binary=%s", max_file_size, skip_binary)
 
     def _run_in_background(self, func, *args, **kwargs):
-        """Helper to run a function in a separate thread."""
-        thread = threading.Thread(target=func, args=args, kwargs=kwargs)
-        thread.daemon = True
+        """Helper to run a function in a separate thread.
+        
+        Note: Uses daemon threads for non-critical background tasks.
+        For critical operations that must complete, consider using non-daemon threads.
+        """
+        thread = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
+        thread.name = f"CodexifyBg-{func.__name__}"
         thread.start()
+        return thread
 
     def load_project(self, path: str):
         """
@@ -605,62 +610,62 @@ class CodexifyEngine:
     
     def _hotkey_open_project(self):
         """Hotkey handler for opening project."""
-        print("Engine: Hotkey - Open project")
+        self.log.info("Hotkey - Open project")
         # This would typically trigger a file dialog in the GUI
     
     def _hotkey_save_collection(self):
         """Hotkey handler for saving collection."""
-        print("Engine: Hotkey - Save collection")
+        self.log.info("Hotkey - Save collection")
         # This would typically trigger a save dialog in the GUI
     
     def _hotkey_export_project(self):
         """Hotkey handler for exporting project."""
-        print("Engine: Hotkey - Export project")
+        self.log.info("Hotkey - Export project")
         # This would typically trigger an export dialog in the GUI
     
     def _hotkey_run_analysis(self):
         """Hotkey handler for running analysis."""
-        print("Engine: Hotkey - Run analysis")
+        self.log.info("Hotkey - Run analysis")
         self.get_analytics()
     
     def _hotkey_find_duplicates(self):
         """Hotkey handler for finding duplicates."""
-        print("Engine: Hotkey - Find duplicates")
+        self.log.info("Hotkey - Find duplicates")
         self.find_duplicates()
     
     def _hotkey_quick_scan(self):
         """Hotkey handler for quick scan."""
-        print("Engine: Hotkey - Quick scan")
+        self.log.info("Hotkey - Quick scan")
         # This would implement a quick scan without full analysis
     
     def _hotkey_next_file(self):
         """Hotkey handler for next file."""
-        print("Engine: Hotkey - Next file")
+        self.log.info("Hotkey - Next file")
         # This would navigate to next file in GUI
     
     def _hotkey_previous_file(self):
         """Hotkey handler for previous file."""
-        print("Engine: Hotkey - Previous file")
+        self.log.info("Hotkey - Previous file")
         # This would navigate to previous file in GUI
     
     def _hotkey_toggle_include(self):
         """Hotkey handler for toggling include."""
-        print("Engine: Hotkey - Toggle include")
+        self.log.info("Hotkey - Toggle include")
         # This would toggle file inclusion in GUI
     
     def _hotkey_preferences(self):
         """Hotkey handler for preferences."""
-        print("Engine: Hotkey - Preferences")
+        self.log.info("Hotkey - Preferences")
         # This would open preferences dialog
     
     def _hotkey_help(self):
         """Hotkey handler for help."""
-        print("Engine: Hotkey - Help")
+        self.log.info("Hotkey - Help")
         # This would show help information
     
     def _hotkey_refresh(self):
         """Hotkey handler for refresh."""
-        print("Engine: Hotkey - Refresh")
+        self.log.info("Hotkey - Refresh")
         # This would refresh the current view
     
     # Utility Methods

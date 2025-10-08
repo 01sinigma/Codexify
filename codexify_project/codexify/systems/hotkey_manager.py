@@ -5,6 +5,9 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 from enum import Enum
 import tkinter as tk
+from codexify.utils.logger import get_logger
+
+logger = get_logger("hotkey_manager")
 
 class KeyModifier(Enum):
     """Keyboard modifiers for hotkeys."""
@@ -72,7 +75,7 @@ class HotkeyManager:
                         hotkeys[hotkey_id] = Hotkey(**hotkey_data)
                     return hotkeys
             except Exception as e:
-                print(f"HotkeyManager: Error loading hotkeys: {e}")
+                logger.error("Error loading hotkeys: %s", e)
         
         # Create default hotkeys
         return self._create_default_hotkeys()
@@ -271,7 +274,7 @@ class HotkeyManager:
                         profile_name = profile_file.stem
                         profiles[profile_name] = profile_data
                 except Exception as e:
-                    print(f"HotkeyManager: Error loading profile {profile_file}: {e}")
+                    logger.warning("Error loading profile %s: %s", profile_file, e)
         # Ensure default exists
         if not profiles:
             if self.volatile_mode:
@@ -290,7 +293,7 @@ class HotkeyManager:
                             profile_data = json.load(f)
                             profiles[profile_file.stem] = profile_data
                 except Exception as e:
-                    print(f"HotkeyManager: Error loading default profile: {e}")
+                    logger.warning("Error loading default profile: %s", e)
         return profiles
     
     def _create_default_profile(self):
@@ -311,7 +314,7 @@ class HotkeyManager:
                 with open(profile_file, 'w', encoding='utf-8') as f:
                     json.dump(default_profile, f, indent=2, ensure_ascii=False)
             except Exception as e:
-                print(f"HotkeyManager: Error creating default profile: {e}")
+                logger.error("Error creating default profile: %s", e)
     
     def _save_hotkeys(self, hotkeys: Dict[str, Hotkey]):
         """Saves hotkeys to file."""
@@ -326,7 +329,7 @@ class HotkeyManager:
             with open(self.hotkeys_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"HotkeyManager: Error saving hotkeys: {e}")
+            logger.error("Error saving hotkeys: %s", e)
     
     def _save_profiles(self):
         """Saves profiles to files."""
@@ -338,7 +341,7 @@ class HotkeyManager:
                 with open(profile_file, 'w', encoding='utf-8') as f:
                     json.dump(profile_data, f, indent=2, ensure_ascii=False)
             except Exception as e:
-                print(f"HotkeyManager: Error saving profile {profile_name}: {e}")
+                logger.error("Error saving profile %s: %s", profile_name, e)
     
     def set_root_widget(self, root: tk.Tk):
         """Sets the root widget for hotkey binding."""
@@ -371,7 +374,7 @@ class HotkeyManager:
             self.root_widget.bind(key_sequence, lambda e: self._handle_hotkey(hotkey))
             self.bound_widgets.add(hotkey.id)
         except Exception as e:
-            print(f"HotkeyManager: Error binding hotkey {hotkey.id}: {e}")
+            logger.error("Error binding hotkey %s: %s", hotkey.id, e)
     
     def _hotkey_to_sequence(self, hotkey: Hotkey) -> str:
         """Converts a hotkey to Tkinter key sequence format."""
@@ -395,16 +398,16 @@ class HotkeyManager:
     
     def _handle_hotkey(self, hotkey: Hotkey):
         """Handles a hotkey press event."""
-        print(f"HotkeyManager: Hotkey pressed: {hotkey.name} ({hotkey.action})")
+        logger.info("Hotkey pressed: %s (%s)", hotkey.name, hotkey.action)
         
         # Execute the action if handler exists
         if hotkey.action in self.action_handlers:
             try:
                 self.action_handlers[hotkey.action]()
             except Exception as e:
-                print(f"HotkeyManager: Error executing action {hotkey.action}: {e}")
+                logger.error("Error executing action %s: %s", hotkey.action, e)
         else:
-            print(f"HotkeyManager: No handler for action {hotkey.action}")
+            logger.warning("No handler for action %s", hotkey.action)
     
     def _unbind_all_hotkeys(self):
         """Unbinds all hotkeys from the root widget."""
@@ -417,7 +420,7 @@ class HotkeyManager:
                 # This is a limitation, but in practice it's rarely needed
                 pass
             except Exception as e:
-                print(f"HotkeyManager: Error unbinding hotkey {hotkey_id}: {e}")
+                logger.error("Error unbinding hotkey %s: %s", hotkey_id, e)
         
         self.bound_widgets.clear()
     
@@ -553,7 +556,7 @@ class HotkeyManager:
                     try:
                         profile_file.unlink()
                     except Exception as e:
-                        print(f"HotkeyManager: Error deleting profile file: {e}")
+                        logger.error("Error deleting profile file: %s", e)
             
             del self.profiles[profile_name]
     
@@ -569,7 +572,7 @@ class HotkeyManager:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"HotkeyManager: Error exporting hotkeys: {e}")
+            logger.error("Error exporting hotkeys: %s", e)
     
     def import_hotkeys(self, file_path: str):
         """Imports hotkey configuration from a file."""
@@ -592,7 +595,7 @@ class HotkeyManager:
             self._bind_all_hotkeys()
             self._save_hotkeys(self.hotkeys)
         except Exception as e:
-            print(f"HotkeyManager: Error importing hotkeys: {e}")
+            logger.error("Error importing hotkeys: %s", e)
     
     def get_conflicts(self) -> List[Dict[str, Any]]:
         """Checks for hotkey conflicts and returns them."""

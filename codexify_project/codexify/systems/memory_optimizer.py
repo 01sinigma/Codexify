@@ -13,6 +13,9 @@ import time
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from codexify.utils.logger import get_logger
+
+logger = get_logger("memory_optimizer")
 import weakref
 import tracemalloc
 
@@ -67,10 +70,11 @@ class MemoryMonitor:
         self._monitor_thread = threading.Thread(
             target=self._monitor_loop,
             args=(interval_seconds,),
-            daemon=True
+            daemon=True,  # Safe for monitoring tasks that don't need graceful shutdown
+            name="MemoryMonitor"
         )
         self._monitor_thread.start()
-        print("MemoryMonitor: Started monitoring")
+        logger.info("MemoryMonitor: Started monitoring")
     
     def stop_monitoring(self):
         """Stop memory monitoring."""
@@ -84,7 +88,7 @@ class MemoryMonitor:
             self._monitor_thread.join(timeout=5.0)
             self._monitor_thread = None
         
-        print("MemoryMonitor: Stopped monitoring")
+        logger.info("MemoryMonitor: Stopped monitoring")
     
     def take_snapshot(self) -> MemorySnapshot:
         """Take a memory usage snapshot."""
@@ -133,15 +137,15 @@ class MemoryMonitor:
                 # Check thresholds
                 memory_mb = snapshot.memory_usage / (1024 * 1024)
                 if memory_mb > self.critical_threshold_mb:
-                    print(f"MemoryMonitor: CRITICAL - Memory usage: {memory_mb:.1f}MB")
+                    logger.critical("CRITICAL - Memory usage: %.1fMB", memory_mb)
                 elif memory_mb > self.warning_threshold_mb:
-                    print(f"MemoryMonitor: WARNING - Memory usage: {memory_mb:.1f}MB")
+                    logger.warning("WARNING - Memory usage: %.1fMB", memory_mb)
                 
                 # Wait for next interval
                 self._stop_event.wait(interval_seconds)
                 
             except Exception as e:
-                print(f"MemoryMonitor: Error in monitoring loop: {e}")
+                logger.error("Error in monitoring loop: %s", e)
                 time.sleep(1.0)
     
     def get_memory_trend(self, minutes: int = 10) -> Dict[str, Any]:
@@ -283,7 +287,7 @@ class MemoryOptimizer:
         
         self.optimization_history.append(optimization_record)
         
-        print(f"MemoryOptimizer: GC optimized, collected {collected} objects")
+        logger.info("GC optimized, collected %d objects", collected)
         return collected
     
     def clear_memory_caches(self):
@@ -305,7 +309,7 @@ class MemoryOptimizer:
         
         self.optimization_history.append(optimization_record)
         
-        print(f"MemoryOptimizer: Caches cleared, collected {collected} objects")
+        logger.info("Caches cleared, collected %d objects", collected)
         return collected
     
     def optimize_data_structures(self, data: Any) -> Any:

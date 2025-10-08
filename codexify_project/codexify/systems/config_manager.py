@@ -4,6 +4,9 @@ from typing import Dict, Any, List, Optional, Union
 from pathlib import Path
 from datetime import datetime
 import shutil
+from codexify.utils.logger import get_logger
+
+logger = get_logger("config_manager")
 
 class ConfigManager:
     """
@@ -110,8 +113,11 @@ class ConfigManager:
                 # Create default config
                 self._save_config(self.default_config)
                 return self.default_config.copy()
+        except (json.JSONDecodeError, FileNotFoundError, PermissionError) as e:
+            logger.warning("Error loading config: %s", e)
+            return self.default_config.copy()
         except Exception as e:
-            print(f"ConfigManager: Error loading config: {e}")
+            logger.error("Unexpected error loading config: %s", e)
             return self.default_config.copy()
     
     def _merge_configs(self, default: Dict, user: Dict) -> Dict:
@@ -134,7 +140,7 @@ class ConfigManager:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"ConfigManager: Error saving config: {e}")
+            logger.error("Error saving config: %s", e)
     
     def get_setting(self, key_path: str, default: Any = None) -> Any:
         """
@@ -208,7 +214,7 @@ class ConfigManager:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"ConfigManager: Error exporting config: {e}")
+            logger.error("Error exporting config: %s", e)
     
     def import_config(self, file_path: str):
         """Imports configuration from a file."""
@@ -220,7 +226,7 @@ class ConfigManager:
             self.config = self._merge_configs(self.config, imported_config)
             self._save_config(self.config)
         except Exception as e:
-            print(f"ConfigManager: Error importing config: {e}")
+            logger.error("Error importing config: %s", e)
     
     # Preset Management
     
@@ -236,7 +242,7 @@ class ConfigManager:
                         preset_name = preset_file.stem
                         presets[preset_name] = preset_data
                 except Exception as e:
-                    print(f"ConfigManager: Error loading preset {preset_file}: {e}")
+                    logger.warning("Error loading preset %s: %s", preset_file, e)
         
         return presets
 
@@ -262,7 +268,7 @@ class ConfigManager:
                         if isinstance(disk, dict):
                             presets.update(disk)
             except Exception as e:
-                print(f"ConfigManager: Failed to load format presets: {e}")
+                logger.warning("Failed to load format presets: %s", e)
         return presets
 
     def _save_format_presets(self):
@@ -272,7 +278,7 @@ class ConfigManager:
             with open(self._format_presets_file(), 'w', encoding='utf-8') as f:
                 json.dump(self.format_presets, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"ConfigManager: Failed to save format presets: {e}")
+            logger.error("Failed to save format presets: %s", e)
 
     def get_format_preset_names(self) -> List[str]:
         return sorted(self.format_presets.keys())
@@ -303,7 +309,7 @@ class ConfigManager:
                     if isinstance(disk, dict):
                         presets.update({k: list(v) for k, v in disk.items()})
         except Exception as e:
-            print(f"ConfigManager: Failed to load path presets: {e}")
+            logger.warning("Failed to load path presets: %s", e)
         return presets
 
     def _save_path_presets(self):
@@ -313,7 +319,7 @@ class ConfigManager:
             with open(self._path_presets_file(), 'w', encoding='utf-8') as f:
                 json.dump(self.path_presets, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"ConfigManager: Failed to save path presets: {e}")
+            logger.error("Failed to save path presets: %s", e)
 
     def get_path_preset_names(self) -> List[str]:
         return sorted(self.path_presets.keys())
@@ -402,7 +408,7 @@ class ConfigManager:
             # Reload presets
             self.presets = self._load_presets()
         except Exception as e:
-            print(f"ConfigManager: Error creating preset: {e}")
+            logger.error("Error creating preset: %s", e)
     
     def load_preset(self, name: str):
         """Loads a preset and applies its settings."""
@@ -423,7 +429,7 @@ class ConfigManager:
                 # Reload presets
                 self.presets = self._load_presets()
             except Exception as e:
-                print(f"ConfigManager: Error deleting preset: {e}")
+                logger.error("Error deleting preset: %s", e)
     
     def get_preset_names(self) -> List[str]:
         """Returns list of available preset names."""
@@ -475,7 +481,7 @@ class ConfigManager:
                         theme_name = theme_file.stem
                         themes[theme_name] = theme_data
                 except Exception as e:
-                    print(f"ConfigManager: Error loading theme {theme_file}: {e}")
+                    logger.warning("Error loading theme %s: %s", theme_file, e)
         
         # Add default theme if none exists
         if not themes:
@@ -492,7 +498,7 @@ class ConfigManager:
                                 theme_name = theme_file.stem
                                 themes[theme_name] = theme_data
                         except Exception as e:
-                            print(f"ConfigManager: Error loading theme {theme_file}: {e}")
+                            logger.warning("Error loading theme %s: %s", theme_file, e)
         
         return themes
     
@@ -509,7 +515,7 @@ class ConfigManager:
             with open(theme_file, 'w', encoding='utf-8') as f:
                 json.dump(default_theme, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"ConfigManager: Error creating default theme: {e}")
+            logger.error("Error creating default theme: %s", e)
     
     def get_theme(self, name: str = None) -> Dict[str, Any]:
         """Gets theme data by name or current theme."""
@@ -533,7 +539,7 @@ class ConfigManager:
             # Reload themes
             self.themes = self._load_themes()
         except Exception as e:
-            print(f"ConfigManager: Error creating theme: {e}")
+            logger.error("Error creating theme: %s", e)
     
     # Template Management
     
@@ -581,7 +587,7 @@ class ConfigManager:
                         template_name = template_file.stem
                         templates[template_name] = template_data
                 except Exception as e:
-                    print(f"ConfigManager: Error loading template {template_file}: {e}")
+                    logger.warning("Error loading template %s: %s", template_file, e)
         
         # Add default templates if none exist
         if not templates:
@@ -598,7 +604,7 @@ class ConfigManager:
                                 template_name = template_file.stem
                                 templates[template_name] = template_data
                         except Exception as e:
-                            print(f"ConfigManager: Error loading template {template_file}: {e}")
+                            logger.warning("Error loading template %s: %s", template_file, e)
         
         return templates
     
@@ -615,7 +621,7 @@ class ConfigManager:
                 with open(template_file, 'w', encoding='utf-8') as f:
                     json.dump(template_data, f, indent=2, ensure_ascii=False)
             except Exception as e:
-                print(f"ConfigManager: Error creating template {name}: {e}")
+                logger.error("Error creating template %s: %s", name, e)
     
     def get_template(self, name: str) -> Dict[str, Any]:
         """Gets template data by name."""
@@ -639,7 +645,7 @@ class ConfigManager:
             shutil.copy2(self.config_file, backup_file)
             return str(backup_file)
         except Exception as e:
-            print(f"ConfigManager: Error creating backup: {e}")
+            logger.error("Error creating backup: %s", e)
             return None
     
     def restore_config(self, backup_file: str):
@@ -649,7 +655,7 @@ class ConfigManager:
             # Reload configuration
             self.config = self._load_config()
         except Exception as e:
-            print(f"ConfigManager: Error restoring backup: {e}")
+            logger.error("Error restoring backup: %s", e)
     
     def validate_config(self) -> List[str]:
         """Validates the current configuration and returns any errors."""
@@ -846,7 +852,7 @@ class ConfigManager:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"ConfigManager: Error exporting config: {e}")
+            logger.error("Error exporting config: %s", e)
     
     def import_configuration(self, file_path: str):
         """Imports configuration from a file."""
@@ -861,7 +867,7 @@ class ConfigManager:
         except json.JSONDecodeError as e:
             raise json.JSONDecodeError(f"Invalid JSON in configuration file: {e}", e.doc, e.pos)
         except Exception as e:
-            print(f"ConfigManager: Error importing config: {e}")
+            logger.error("Error importing config: %s", e)
     
     def validate_configuration(self) -> bool:
         """Validates the current configuration."""

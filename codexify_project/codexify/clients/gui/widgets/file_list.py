@@ -367,18 +367,33 @@ class FileList(ttk.Frame):
     def _open_file(self):
         paths = self._selected_paths()
         if paths:
-            print(f"Opening: {paths[0]}")
+            self.log.info("Opening: %s", paths[0])
     
     def _open_in_explorer(self):
         paths = self._selected_paths()
         if paths:
-            import subprocess
+            import subprocess, shutil
             path = paths[0]
             if os.path.exists(path):
-                if os.name == 'nt':
-                    subprocess.run(['explorer', '/select,', path])
-                else:
-                    subprocess.run(['xdg-open', os.path.dirname(path)])
+                try:
+                    if os.name == 'nt':
+                        # Use shutil.which to find explorer safely
+                        explorer = shutil.which('explorer.exe')
+                        if explorer:
+                            subprocess.run([explorer, '/select,', path], shell=False, check=False)
+                        else:
+                            # Fallback: open containing directory
+                            subprocess.run(['explorer', os.path.dirname(path)], shell=False, check=False)
+                    else:
+                        # Use shutil.which to find xdg-open safely
+                        xdg_open = shutil.which('xdg-open')
+                        if xdg_open:
+                            subprocess.run([xdg_open, os.path.dirname(path)], shell=False, check=False)
+                        else:
+                            # Fallback: try to open with default file manager
+                            subprocess.run(['nautilus', os.path.dirname(path)], shell=False, check=False)
+                except (subprocess.SubprocessError, OSError) as e:
+                    self.log.error("Failed to open file location: %s", e)
     
     def _copy_path(self):
         paths = self._selected_paths()

@@ -5,6 +5,9 @@ import concurrent.futures
 from pathlib import Path
 from collections import defaultdict, Counter
 from datetime import datetime
+from codexify.utils.logger import get_logger
+
+logger = get_logger("analyzer")
 
 class ProjectAnalyzer:
     """
@@ -75,7 +78,7 @@ class ProjectAnalyzer:
         if not file_paths:
             return self._empty_analysis()
         
-        print(f"Analyzer: Analyzing {len(file_paths)} files...")
+        logger.info("Analyzing %d files", len(file_paths))
         
         # Build components
         summary = self._get_summary_stats(file_paths)
@@ -101,7 +104,7 @@ class ProjectAnalyzer:
             'generated_at': datetime.now().isoformat()
         }
         
-        print(f"Analyzer: Analysis complete. Found {analysis['languages']['total_languages']} programming languages.")
+        logger.info("Analysis complete. Found %d programming languages", analysis['languages']['total_languages'])
         return analysis
 
     def _empty_analysis(self) -> Dict:

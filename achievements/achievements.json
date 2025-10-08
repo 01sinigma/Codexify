@@ -79,8 +79,8 @@
     "requirements": {
       "unique_formats_used": 10
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-09-17T13:26:49.926977",
     "progress": {}
   },
   "first_analysis": {
@@ -177,8 +177,8 @@
     "requirements": {
       "collections_created": 1
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-09-05T12:38:57.555112",
     "progress": {}
   },
   "collection_master": {
@@ -191,8 +191,8 @@
     "requirements": {
       "collections_created": 25
     },
-    "unlocked": false,
-    "unlocked_at": null,
+    "unlocked": true,
+    "unlocked_at": "2025-10-04T00:20:10.021277",
     "progress": {}
   },
   "format_explorer": {

@@ -2,6 +2,9 @@ import os
 import fnmatch
 from typing import Set, List, Optional
 from pathlib import Path
+from codexify.utils.logger import get_logger
+
+logger = get_logger("scanner")
 
 def _load_codexignore(project_path: str) -> List[str]:
     """
@@ -20,7 +23,7 @@ def _load_codexignore(project_path: str) -> List[str]:
                 if line and not line.startswith('#'):
                     patterns.append(line)
     except Exception as e:
-        print(f"Warning: Could not read .codexignore: {e}")
+        logger.warning("Could not read .codexignore: %s", e)
     
     return patterns
 
@@ -84,13 +87,13 @@ def scan_directory(path: str,
     if not os.path.isdir(path):
         raise NotADirectoryError(f"Path is not a directory: {path}")
     
-    print(f"Scanner: Scanning directory {path}...")
+    logger.info("Scanning directory: %s", path)
     
     # Load ignore patterns if not provided
     if ignore_patterns is None:
         ignore_patterns = _load_codexignore(path)
         if ignore_patterns:
-            print(f"Scanner: Loaded {len(ignore_patterns)} ignore patterns from .codexignore")
+            logger.info("Loaded %d ignore patterns from .codexignore", len(ignore_patterns))
     
     found_files: Set[str] = set()
     ignored_count = 0
@@ -127,14 +130,14 @@ def scan_directory(path: str,
                 found_files.add(file_path)
                 
     except PermissionError as e:
-        print(f"Scanner: Permission denied accessing {e.filename}")
+        logger.warning("Permission denied accessing %s", e.filename)
     except Exception as e:
-        print(f"Scanner: Error during scanning: {e}")
+        logger.error("Error during scanning: %s", e)
     
-    print(f"Scanner: Found {len(found_files)} files")
-    print(f"Scanner: Ignored {ignored_count} files (patterns)")
+    logger.info("Found %d files", len(found_files))
+    logger.info("Ignored %d files (patterns)", ignored_count)
     if binary_count or size_ignored_count:
-        print(f"Scanner: Also detected {binary_count} binary and {size_ignored_count} large files (listed anyway)")
+        logger.info("Also detected %d binary and %d large files (listed anyway)", binary_count, size_ignored_count)
     
     return found_files
 

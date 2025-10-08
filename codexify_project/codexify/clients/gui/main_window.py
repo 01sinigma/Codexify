@@ -9,17 +9,23 @@ import webbrowser, tempfile, os
 import json
 import re
 from codexify.utils.logger import get_logger
+
+logger = get_logger("main_window")
+
 try:
     from tkinterdnd2 import TkinterDnD  # type: ignore
     _DND_AVAILABLE = True
-except Exception:
+except ImportError:
+    _DND_AVAILABLE = False
+except Exception as e:
+    logger.warning("Unexpected error importing tkinterdnd2: %s", e)
     _DND_AVAILABLE = False
 from codexify.engine import CodexifyEngine
 from codexify.utils.llm import LLMProvider
 from codexify.events import STATUS_CHANGED, FILES_UPDATED, PROJECT_LOADED, ANALYSIS_COMPLETE
 from .styles import theme
 from .widgets import (
-    FileList, ProgressWidget, StatusBar, CodexifyToolbar, 
+    FileList, ProgressWidget, StatusBar, CodexifyToolbar,
     SearchWidget, FormatSelector
 )
 
@@ -44,7 +50,8 @@ class MainWindow(BaseTk):
         # Localization (basic RU/EN)
         try:
             self.lang = (self.engine.get_setting('app.language', 'en') or 'en')
-        except Exception:
+        except (KeyError, TypeError, AttributeError) as e:
+            logger.warning("Failed to get language setting: %s", e)
             self.lang = 'en'
         self._i18n = {
             'en': {
@@ -78,8 +85,8 @@ class MainWindow(BaseTk):
         # Bind hotkeys to this root
         try:
             self.engine.set_root_widget(self)
-        except Exception:
-            pass
+        except (AttributeError, RuntimeError) as e:
+            logger.warning("Failed to set root widget for hotkeys: %s", e)
         
         # 2. Subscribe to engine events
         self.engine.events.subscribe(STATUS_CHANGED, self.on_status_changed)
@@ -2042,7 +2049,8 @@ class MainWindow(BaseTk):
             if not self._ai_cancelled:
                 self._show_text_modal(title, result_box.get('text',''))
                 self.status_bar.set_status('AI: done', 'success')
-        threading.Thread(target=worker, daemon=True).start()
+        thread = threading.Thread(target=worker, daemon=True, name="ImportWorker")
+        thread.start()
     
     def collect_code(self):
         """Collect and export code."""
@@ -2448,16 +2456,39 @@ class MainWindow(BaseTk):
     def show_help(self):
         """Show help and documentation."""
         def open_logs():
-            import os, subprocess
+            import os, subprocess, shutil
             log_path = os.path.abspath('logs/app.log')
             os.makedirs('logs', exist_ok=True)
             if not os.path.exists(log_path):
                 with open(log_path, 'w', encoding='utf-8') as f:
                     f.write('')
-            if os.name == 'nt':
-                subprocess.Popen(['notepad.exe', log_path])
-            else:
-                subprocess.Popen(['xdg-open', log_path])
+            
+            # Validate log path for security
+            if not os.path.exists(log_path) or not os.path.isfile(log_path):
+                self.log.warning("Log file not found or invalid: %s", log_path)
+                return
+                
+            try:
+                if os.name == 'nt':
+                    # Use shutil.which to find notepad.exe safely
+                    notepad = shutil.which('notepad.exe')
+                    if notepad:
+                        subprocess.Popen([notepad, log_path], shell=False)
+                    else:
+                        # Fallback to webbrowser for Windows
+                        webbrowser.open(f'file://{log_path}')
+                else:
+                    # Use shutil.which to find xdg-open safely
+                    xdg_open = shutil.which('xdg-open')
+                    if xdg_open:
+                        subprocess.Popen([xdg_open, log_path], shell=False)
+                    else:
+                        # Fallback to webbrowser for Unix-like systems
+                        webbrowser.open(f'file://{log_path}')
+            except (subprocess.SubprocessError, OSError) as e:
+                self.log.error("Failed to open log file: %s", e)
+                # Fallback to webbrowser
+                webbrowser.open(f'file://{log_path}')
         top = tk.Toplevel(self)
         top.title('Help')
         frm = theme.create_styled_frame(top)

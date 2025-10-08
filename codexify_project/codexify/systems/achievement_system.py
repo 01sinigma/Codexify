@@ -5,6 +5,9 @@ from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, asdict
 from enum import Enum
+from codexify.utils.logger import get_logger
+
+logger = get_logger("achievement_system")
 
 class AchievementType(Enum):
     """Types of achievements available in the system."""
@@ -68,7 +71,7 @@ class AchievementSystem:
                         achievements[ach_id] = Achievement(**ach_data)
                     return achievements
             except Exception as e:
-                print(f"AchievementSystem: Error loading achievements: {e}")
+                logger.error("Error loading achievements: %s", e)
         
         # Create default achievements
         return self._create_default_achievements()
@@ -278,7 +281,7 @@ class AchievementSystem:
                             data[key] = set(data[key])
                     return data
             except Exception as e:
-                print(f"AchievementSystem: Error loading stats: {e}")
+                logger.error("Error loading stats: %s", e)
         
         # Return default stats
         return {
@@ -313,7 +316,7 @@ class AchievementSystem:
             with open(self.achievements_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"AchievementSystem: Error saving achievements: {e}")
+            logger.error("Error saving achievements: %s", e)
     
     def _save_stats(self):
         """Saves statistics to file."""
@@ -329,7 +332,7 @@ class AchievementSystem:
             with open(self.stats_file, 'w', encoding='utf-8') as f:
                 json.dump(stats_copy, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"AchievementSystem: Error saving stats: {e}")
+            logger.error("Error saving stats: %s", e)
     
     def set_engine(self, engine, event_manager):
         """Sets the engine and event manager for event subscription."""
@@ -512,10 +515,10 @@ class AchievementSystem:
     def _notify_achievements(self, achievements: List[Achievement]):
         """Notifies about newly unlocked achievements."""
         for achievement in achievements:
-            print(f"🏆 Achievement Unlocked: {achievement.name} ({achievement.icon})")
-            print(f"   {achievement.description}")
-            print(f"   Points: +{achievement.points}")
-            print()
+            logger.info("🏆 Achievement Unlocked: %s (%s)", achievement.name, achievement.icon)
+            logger.info("   %s", achievement.description)
+            logger.info("   Points: +%d", achievement.points)
+            logger.info("")
     
     def get_achievement(self, achievement_id: str) -> Optional[Achievement]:
         """Gets an achievement by ID."""

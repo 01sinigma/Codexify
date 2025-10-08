@@ -3,6 +3,9 @@ import time
 from typing import Set, Dict, Optional
 from pathlib import Path
 from datetime import datetime
+from codexify.utils.logger import get_logger
+
+logger = get_logger("builder")
 
 class CodeBuilder:
     """
@@ -37,15 +40,15 @@ class CodeBuilder:
             True if successful, False otherwise
         """
         if not files_to_include:
-            print("Builder: No files to include")
+            logger.warning("No files to include")
             return False
         
         # Determine output format
         if format_type not in self.supported_formats:
-            print(f"Builder: Unsupported format '{format_type}', using 'txt'")
+            logger.warning("Unsupported format '%s', using 'txt'", format_type)
             format_type = "txt"
         
-        print(f"Builder: Writing {len(files_to_include)} files to {output_path} in {format_type} format...")
+        logger.info("Writing %d files to %s in %s format", len(files_to_include), output_path, format_type)
         
         try:
             # Create output directory if it doesn't exist
@@ -60,15 +63,15 @@ class CodeBuilder:
             success = formatter(output_path, files_to_include, file_stats, project_path, include_metadata, other_files or set())
             
             if success:
-                print(f"Builder: Successfully wrote collected sources to {output_path}")
-                print(f"Builder: Total size: {file_stats['total_size']} bytes")
+                logger.info("Successfully wrote collected sources to %s", output_path)
+                logger.info("Total size: %d bytes", file_stats['total_size'])
                 return True
             else:
-                print("Builder: Failed to write output file")
+                logger.error("Failed to write output file")
                 return False
                 
         except Exception as e:
-            print(f"Builder: Error writing to output file: {e}")
+            logger.error("Error writing to output file: %s", e)
             return False
     
     def _get_files_info(self, files: Set[str], project_path: str) -> Dict:
@@ -93,7 +96,7 @@ class CodeBuilder:
                 }
                 
             except OSError as e:
-                print(f"Builder: Warning: Could not get info for {file_path}: {e}")
+                logger.warning("Could not get info for %s: %s", file_path, e)
                 file_info[file_path] = {
                     'relative_path': file_path,
                     'size': 0,
@@ -157,7 +160,7 @@ class CodeBuilder:
                 return True
                 
         except Exception as e:
-            print(f"Builder: Error in text formatter: {e}")
+            logger.error("Error in text formatter: %s", e)
             return False
     
     def _write_markdown_format(self, output_path: str, files: Set[str], 
@@ -196,7 +199,7 @@ class CodeBuilder:
                 return True
                 
         except Exception as e:
-            print(f"Builder: Error in markdown formatter: {e}")
+            logger.error("Error in markdown formatter: %s", e)
             return False
     
     def _write_html_format(self, output_path: str, files: Set[str], 
@@ -257,7 +260,7 @@ class CodeBuilder:
                 return True
                 
         except Exception as e:
-            print(f"Builder: Error in HTML formatter: {e}")
+            logger.error("Error in HTML formatter: %s", e)
             return False
 
 # Backward compatibility function

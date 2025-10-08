@@ -4,6 +4,9 @@ from typing import Dict, List, Set, Tuple, Optional
 from pathlib import Path
 from collections import defaultdict
 import difflib
+from codexify.utils.logger import get_logger
+
+logger = get_logger("duplicate_finder")
 
 class DuplicateFinder:
     """
@@ -34,7 +37,7 @@ class DuplicateFinder:
         if not file_paths:
             return self._empty_results()
         
-        print(f"DuplicateFinder: Analyzing {len(file_paths)} files for duplicates...")
+        logger.info("Analyzing %d files for duplicates", len(file_paths))
         
         results = {
             'exact_duplicates': {},
@@ -60,7 +63,7 @@ class DuplicateFinder:
         results['summary'] = self._generate_summary(results)
         results['generated_at'] = self._get_timestamp()
         
-        print(f"DuplicateFinder: Found {results['summary']['total_duplicates']} duplicate groups")
+        logger.info("Found %d duplicate groups", results['summary']['total_duplicates'])
         return results
     
     def _find_exact_duplicates(self, file_paths: List[str]) -> Dict:
@@ -74,7 +77,7 @@ class DuplicateFinder:
                 file_hashes[file_path] = file_hash
                 hash_groups[file_hash].append(file_path)
             except Exception as e:
-                print(f"DuplicateFinder: Error processing {file_path}: {e}")
+                logger.warning("Error processing %s: %s", file_path, e)
                 continue
         
         # Filter groups with more than one file
@@ -106,7 +109,7 @@ class DuplicateFinder:
                             'content': block['content']
                         })
             except Exception as e:
-                print(f"DuplicateFinder: Error extracting blocks from {file_path}: {e}")
+                logger.warning("Error extracting blocks from %s: %s", file_path, e)
                 continue
         
         # Filter blocks that appear in multiple files
@@ -153,7 +156,7 @@ class DuplicateFinder:
                             processed_files.add(file2)
                             
                     except Exception as e:
-                        print(f"DuplicateFinder: Error comparing {file2}: {e}")
+                        logger.warning("Error comparing %s: %s", file2, e)
                         continue
                 
                 if len(current_group) > 1:
@@ -164,7 +167,7 @@ class DuplicateFinder:
                     })
                     
             except Exception as e:
-                print(f"DuplicateFinder: Error processing {file1}: {e}")
+                logger.warning("Error processing %s: %s", file1, e)
                 continue
         
         return {'groups': similar_groups}

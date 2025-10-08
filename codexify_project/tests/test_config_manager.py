@@ -250,7 +250,7 @@ class TestConfigManager:
         assert export_path.exists()
         
         # Verify file content
-        with open(export_path, 'r') as f:
+        with open(export_path, 'r', encoding='utf-8') as f:
             exported_config = json.load(f)
         
         assert "app" in exported_config
@@ -270,7 +270,7 @@ class TestConfigManager:
         }
         
         config_file = Path(temp_project_dir) / "test_config.json"
-        with open(config_file, 'w') as f:
+        with open(config_file, 'w', encoding='utf-8') as f:
             json.dump(test_config, f)
         
         # Import configuration
