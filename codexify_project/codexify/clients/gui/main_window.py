@@ -564,8 +564,25 @@ class MainWindow(BaseTk):
             except Exception:
                 pass
             if target == 'include':
-                # apply same policy as manual move
+                from pathlib import Path
+
+                # apply same policy as manual move for currently selected entries
                 self._move_selected(self.include_list, 'include')  # reuse path
+
+                active = set(self.engine.state.active_formats or [])
+                new_exts = {Path(p).suffix.lower() for p in collected if Path(p).suffix}
+                missing = sorted([ext for ext in new_exts if ext not in active])
+                if missing:
+                    missing_text = ', '.join(missing)
+                    ans = messagebox.askyesno(
+                        "Add formats?",
+                        f"Selected files contain new types: {missing_text}.\nAdd these formats and include ALL files of these types?"
+                    )
+                    if ans:
+                        active.update(missing)
+                        self.engine.set_active_formats(active)
+                        pool = set(self.engine.state.include_files) | set(self.engine.state.other_files) | collected
+                        collected |= {p for p in pool if Path(p).suffix.lower() in missing}
                 # fallback include only collected if selection not present
                 self.engine.move_files(collected, 'include')
             else:
