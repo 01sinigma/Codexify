@@ -478,25 +478,45 @@ class CodexifyEngine:
             | set(self.state.include_files or set()) \
             | set(self.state.other_files or set())
 
+        # Preserve manual overrides only for files that are still present
+        preserved_modes = {
+            path: mode
+            for path, mode in (self.state.file_inclusion_modes or {}).items()
+            if path in source_files
+        }
+
         # Reset classifications
         self.state.include_files = set()
         self.state.other_files = set()
         self.state.ignored_files = set()
-        self.state.file_inclusion_modes = {}
 
         # If нет выбранных форматов, ничего не включаем: все попадут в Other
         active_exts = set(self.state.active_formats or [])
 
-        # Classify files based on extensions
+        new_modes = {}
+
+        # Classify files based on manual overrides first, then by extensions
         for file_path in source_files:
+            manual_mode = preserved_modes.get(file_path)
+            if manual_mode == 'include':
+                self.state.include_files.add(file_path)
+                new_modes[file_path] = 'include'
+                continue
+            if manual_mode == 'other':
+                self.state.other_files.add(file_path)
+                new_modes[file_path] = 'other'
+                continue
+
             file_ext = Path(file_path).suffix.lower()
-            
+
             if file_ext in active_exts:
                 self.state.include_files.add(file_path)
-                self.state.file_inclusion_modes[file_path] = 'include'
+                new_modes[file_path] = 'include'
             else:
                 self.state.other_files.add(file_path)
-                self.state.file_inclusion_modes[file_path] = 'other'
+                new_modes[file_path] = 'other'
+
+        self.state.file_inclusion_modes = new_modes
 
         self.log.info("classified | include=%d other=%d", len(self.state.include_files), len(self.state.other_files))
 

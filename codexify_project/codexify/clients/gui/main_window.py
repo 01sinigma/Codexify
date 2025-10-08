@@ -487,7 +487,11 @@ class MainWindow(BaseTk):
     # --- DnD helpers ---
     def _dnd_start(self, event):
         widget = event.widget
-        widget._drag_start_index = widget.nearest(event.y)
+        try:
+            item = widget.identify_row(event.y)
+        except Exception:
+            item = None
+        widget._drag_start_item = item
 
     def _dnd_drag(self, event):
         # Visual feedback could be added here later
@@ -495,23 +499,23 @@ class MainWindow(BaseTk):
 
     def _dnd_drop(self, event, src_list: FileList, dst_list: FileList, to_list: str):
         try:
-            start = getattr(src_list.listbox, '_drag_start_index', None)
-            if start is None:
-                return
+            start_item = getattr(src_list.listbox, '_drag_start_item', None)
             # Collect selected filenames
             selected = src_list.get_selected_files()
             if not selected:
                 # If none selected, use item under drag start
-                fname = src_list.listbox.get(start)
-                for p in src_list.files:
-                    if p.endswith(fname):
-                        selected = [p]
-                        break
+                if start_item:
+                    try:
+                        values = src_list.listbox.item(start_item, 'values')
+                        if values and len(values) >= 4:
+                            selected = [values[3]]
+                    except Exception:
+                        selected = []
             if selected:
                 self.engine.move_files(set(selected), to_list)
         finally:
-            if hasattr(src_list.listbox, '_drag_start_index'):
-                delattr(src_list.listbox, '_drag_start_index')
+            if hasattr(src_list.listbox, '_drag_start_item'):
+                delattr(src_list.listbox, '_drag_start_item')
 
     def _move_selected(self, list_widget: FileList, to_list: str):
         from pathlib import Path
@@ -586,17 +590,25 @@ class MainWindow(BaseTk):
                 # fallback include only collected if selection not present
                 self.engine.move_files(collected, 'include')
             else:
-                # add to Other и расширения в набор форматов для будущего
                 from pathlib import Path
-                self.engine.state.other_files.update(collected)
-                self.engine.state.include_files -= collected
+
+                state = self.engine.state
+                state.other_files.update(collected)
+                state.include_files -= collected
                 for fp in collected:
-                    self.engine.state.file_inclusion_modes[fp] = 'other'
-                # расширить пресеты активных форматов для будущего
-                active = set(self.engine.state.active_formats or [])
-                exts = {Path(p).suffix.lower() for p in collected if Path(p).suffix}
-                if exts - active:
-                    self.engine.set_active_formats(active | exts)
+                    # сбросить ручной режим, чтобы классификация управляла автоматически
+                    if fp in state.file_inclusion_modes:
+                        del state.file_inclusion_modes[fp]
+                # сохранить файлы как обнаруженные, чтобы поиск и анализ учитывали их
+                state.all_discovered_files = set(state.all_discovered_files or set()) | collected
+
+                detected_exts = {Path(p).suffix.lower() for p in collected if Path(p).suffix}
+                if detected_exts:
+                    try:
+                        self.format_selector.register_detected_formats(detected_exts)
+                    except Exception:
+                        pass
+
                 self.engine.events.post(FILES_UPDATED)
             try:
                 self.log.info(f'UI: add_paths applied | target={target} | include={len(self.engine.state.include_files)} other={len(self.engine.state.other_files)}')
@@ -1559,7 +1571,7 @@ class MainWindow(BaseTk):
 "    function startProgressive(){ const svg=getSvg(); if(!svg) return; progActive=true; revealIndex=0; document.getElementById('prog').style.display='block'; document.getElementById('progPct').style.display='block'; nodes().forEach(n=>n.style.display='none'); edges().forEach(e=>e.style.display='none'); const total = nodes().length + edges().length; const step = ()=>{ if(!progActive){ cancelAnimationFrame(progReq); return;} let shown=0; const ns=nodes(); const es=edges(); while(shown<chunkSize && revealIndex<ns.length){ ns[revealIndex++].style.display=''; shown++; } let ei=0; while(shown<chunkSize && ei<es.length){ const e = es[ei++]; if(e.style.display==='none'){ e.style.display=''; shown++; } } const doneCount = Math.min(revealIndex, ns.length) + Array.from(es).filter(e=>e.style.display!=='none').length; const pct = Math.min(100, Math.round(100*doneCount/Math.max(1,total))); document.getElementById('progBar').style.width=pct+'%'; document.getElementById('progPct').textContent=pct+'%'; if(doneCount>=total){ stopProgressive(); fitToContent(); } else { progReq=requestAnimationFrame(step);} }; progReq=requestAnimationFrame(step);}\n"
 "    function stopProgressive(){ progActive=false; document.getElementById('prog').style.display='none'; document.getElementById('progPct').style.display='none';}\n"
 "    function setChunkSize(val){ const v=parseInt(val||80,10); if(!isNaN(v)&&v>0) chunkSize=v; }\n"
-"    function trimLabels(src){ try{ return src.replace(/\[(.+?)\]/g,(m,p)=>{ if(p.length<=28) return m; return '['+p.slice(0,12)+'…'+p.slice(-12)+']'; }); }catch(e){ return src;} }\n"
+"    function trimLabels(src){ try{ return src.replace(/\\[(.+?)\\]/g,(m,p)=>{ if(p.length<=28) return m; return '['+p.slice(0,12)+'…'+p.slice(-12)+']'; }); }catch(e){ return src;} }\n"
 "    function prepareSrc(orient){ let s = MERMAID_SRC.replace(/graph\\s+(TD|LR|BT|RL)/,'graph '+orient); s = trimLabels(s); return s; }\n"
 "    function rerender(){ const orient=document.getElementById('orient').value; const ns=parseInt(document.getElementById('nodeSp').value||35); const rs=parseInt(document.getElementById('rankSp').value||120); initMermaid(ns,rs); let src = prepareSrc(orient); const host=document.getElementById('mermaidHost'); host.textContent = src; try{ mermaid.run({ querySelector: '#mermaidHost' }); }catch(e){} setTimeout(()=>{ vb0=null; attachHandlers(); fitToContent(); const many = nodes().length + edges().length > 600; if(many){ startProgressive(); } }, 200);}\n"
 "    function updateMini(){ try{ const svg=getSvg(); if(!svg) return; const bb=svg.getBBox(); const vb=currentVB(svg); const c=document.getElementById('mini'); const ctx=c.getContext('2d'); const serializer=new XMLSerializer(); const svgStr=serializer.serializeToString(svg); const img=new Image(); const url=URL.createObjectURL(new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'})); img.onload=function(){ ctx.clearRect(0,0,c.width,c.height); const r=Math.min(c.width/bb.width, c.height/bb.height); const ox=(c.width-bb.width*r)/2, oy=(c.height-bb.height*r)/2; ctx.drawImage(img, ox-bb.x*r, oy-bb.y*r, bb.width*r, bb.height*r); const rx = (vb[0]-bb.x)*r+ox, ry=(vb[1]-bb.y)*r+oy, rw=vb[2]*r, rh=vb[3]*r; ctx.strokeStyle='#38bdf8'; ctx.lineWidth=2; ctx.strokeRect(rx,ry,rw,rh); URL.revokeObjectURL(url); }; img.src=url; }catch(e){} }\n"

@@ -4,7 +4,7 @@ Enhanced format selector widget with better UX.
 
 import tkinter as tk
 from tkinter import ttk
-from typing import List, Callable, Set, Optional
+from typing import List, Callable, Set, Optional, Iterable
 from ..styles import theme, modern_widgets
 
 class FormatSelector(ttk.Frame):
@@ -258,14 +258,31 @@ class FormatSelector(ttk.Frame):
     def _on_canvas_configure(self, event):
         self.formats_canvas.configure(scrollregion=self.formats_canvas.bbox("all"))
 
-    def _populate_categories(self):
+    def _populate_categories(self, preserve_selection: bool = False):
+        previous = None
+        if preserve_selection and self.categories_listbox.size() > 0:
+            sel = self.categories_listbox.curselection()
+            if sel:
+                previous = self.categories_listbox.get(sel[0])
+
         self.categories_listbox.delete(0, tk.END)
-        for category in sorted(self.format_categories.keys()):
+        categories = sorted(self.format_categories.keys())
+        for category in categories:
             self.categories_listbox.insert(tk.END, category)
-        # show first category by default
-        if self.categories_listbox.size() > 0:
-            self.categories_listbox.selection_set(0)
-            self._on_category_selected(None)
+
+        target = None
+        if previous and previous in self.format_categories:
+            target = previous
+        elif categories:
+            target = categories[0]
+
+        if target:
+            idx = categories.index(target)
+            self.categories_listbox.selection_set(idx)
+            self._show_category_formats(target)
+        else:
+            for widget in self.formats_content.winfo_children():
+                widget.destroy()
 
     def _on_category_selected(self, event):
         selection = self.categories_listbox.curselection()
@@ -344,7 +361,7 @@ class FormatSelector(ttk.Frame):
             self._update_count()
             if self.on_formats_changed:
                 self.on_formats_changed(list(self.selected_formats))
-        self._populate_categories()
+        self._populate_categories(preserve_selection=True)
         self._update_active_listbox()
 
     def _update_count(self):
@@ -357,6 +374,34 @@ class FormatSelector(ttk.Frame):
         self.active_listbox.delete(0, tk.END)
         for fmt in sorted(self.selected_formats):
             self.active_listbox.insert(tk.END, fmt)
+
+    def register_detected_formats(self, formats: Iterable[str]):
+        """Register formats that were detected from dropped files without activating them."""
+        normalized = []
+        for fmt in formats:
+            if not fmt:
+                continue
+            fmt = fmt.lower()
+            if not fmt.startswith('.'):
+                fmt = '.' + fmt
+            normalized.append(fmt)
+
+        if not normalized:
+            return
+
+        existing = {f for bucket in self.format_categories.values() for f in bucket}
+        bucket = self.format_categories.setdefault('Detected', [])
+        added = False
+        for fmt in normalized:
+            if fmt in existing:
+                continue
+            bucket.append(fmt)
+            existing.add(fmt)
+            added = True
+
+        if added:
+            bucket.sort()
+            self._populate_categories(preserve_selection=True)
 
     def _remove_selected_active(self):
         sel = self.active_listbox.curselection()
